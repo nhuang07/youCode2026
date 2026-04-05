@@ -127,8 +127,17 @@ export default function CoordinatorDashboard() {
       const { data: volData } = await supabase
         .from("volunteers")
         .select("id, name");
-      if (!logs || !volData) return;
-      const typedLogs = logs as EngagementLog[];
+      const { data: responses } = await supabase
+        .from("urgent_responses")
+        .select("volunteer_id, urgent_request_id, status")
+        .eq("status", "accepted");
+      const { data: orgRequests } = await supabase
+        .from("urgent_requests")
+        .select("id")
+        .eq("org_id", org!.id);
+
+      if (!volData) return;
+      const typedLogs = (logs || []) as EngagementLog[];
       const logsByVol: Record<string, EngagementLog[]> = {};
       typedLogs.forEach((log) => {
         if (!logsByVol[log.volunteer_id]) logsByVol[log.volunteer_id] = [];
@@ -166,6 +175,32 @@ export default function CoordinatorDashboard() {
           suggested_action: prediction.suggested_action,
         });
       }
+
+      // Add volunteers who accepted this org's requests but have no engagement logs
+      const orgRequestIds = new Set((orgRequests || []).map((r) => r.id));
+      const acceptedVolIds = new Set(
+        (responses || [])
+          .filter((r) => orgRequestIds.has(r.urgent_request_id))
+          .map((r) => r.volunteer_id),
+      );
+      const existingVolIds = new Set(results.map((r) => r.name));
+      for (const volId of acceptedVolIds) {
+        const vol = volData.find((v) => v.id === volId);
+        if (vol && !existingVolIds.has(vol.name)) {
+          results.push({
+            name: vol.name,
+            status: "active",
+            last_active_days_ago: 0,
+            total_hours: 0,
+            total_shifts: 0,
+            crisis_responses: 1,
+            streak: 0,
+            trend: "Just joined — responded to an urgent request",
+            suggested_action: "Welcome them! Send an onboarding message.",
+          });
+        }
+      }
+
       setVolunteers(results);
     }
     computeChurn();

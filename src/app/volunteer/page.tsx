@@ -312,9 +312,7 @@ export default function VolunteerDashboard() {
           ...volunteerPayload,
         });
 
-    const { data, error } = await query
-      .select()
-      .single();
+    const { data, error } = await query.select().single();
     if (!error && data) {
       const updatedVolunteer = data as Volunteer;
       setVolunteer(updatedVolunteer);
@@ -505,6 +503,14 @@ export default function VolunteerDashboard() {
           );
         },
       )
+      .on(
+        "postgres_changes",
+        { event: "DELETE", schema: "public", table: "urgent_requests" },
+        (payload) => {
+          const deleted = payload.old as UrgentRequest;
+          setUrgentRequests((prev) => prev.filter((r) => r.id !== deleted.id));
+        },
+      )
       .subscribe();
     return () => {
       supabase.removeChannel(channel);
@@ -537,7 +543,9 @@ export default function VolunteerDashboard() {
     );
 
   const actualUrgent = urgentRequests.filter((r) => r.is_urgent !== false);
-  const generalOpportunities = urgentRequests.filter((r) => r.is_urgent === false);
+  const generalOpportunities = urgentRequests.filter(
+    (r) => r.is_urgent === false,
+  );
 
   const filteredUrgentRequests = actualUrgent.filter((request) =>
     matchesSearch(
@@ -1054,7 +1062,9 @@ export default function VolunteerDashboard() {
                             : "var(--text-secondary)",
                         fontSize: "0.82rem",
                         fontWeight:
-                          onboardingForm.has_vehicle === option.value ? 600 : 400,
+                          onboardingForm.has_vehicle === option.value
+                            ? 600
+                            : 400,
                         cursor: "pointer",
                         textAlign: "left",
                         transition: "all 0.18s ease",
