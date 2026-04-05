@@ -4,10 +4,9 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 import { Org, UrgentRequest } from "@/lib/types";
-import {
-  DEMO_VOLUNTEER_SUMMARIES,
-  DemoVolunteerSummary,
-} from "@/lib/demo-data";
+import { DemoVolunteerSummary } from "@/lib/demo-data";
+import { extractFeatures, predictChurn } from "@/lib/churn";
+import { EngagementLog } from "@/lib/types";
 
 type Tab = "overview" | "requests" | "volunteers";
 
@@ -38,7 +37,7 @@ export default function CoordinatorDashboard() {
   });
   const [orgsLoading, setOrgsLoading] = useState(true);
 
-  const volunteers = DEMO_VOLUNTEER_SUMMARIES;
+  const [volunteers, setVolunteers] = useState<DemoVolunteerSummary[]>([]);
   const activeVols = volunteers.filter((v) => v.status === "active");
   const coolingVols = volunteers.filter((v) => v.status === "cooling");
   const atRiskVols = volunteers.filter((v) => v.status === "at-risk");
@@ -119,6 +118,57 @@ export default function CoordinatorDashboard() {
     return () => {
       supabase.removeChannel(channel);
     };
+  }, [org]);
+
+  useEffect(() => {
+    if (!org) return;
+    async function computeChurn() {
+      const { data: logs } = await supabase.from("engagement_logs").select("*");
+      const { data: volData } = await supabase
+        .from("volunteers")
+        .select("id, name");
+      if (!logs || !volData) return;
+      const typedLogs = logs as EngagementLog[];
+      const logsByVol: Record<string, EngagementLog[]> = {};
+      typedLogs.forEach((log) => {
+        if (!logsByVol[log.volunteer_id]) logsByVol[log.volunteer_id] = [];
+        logsByVol[log.volunteer_id].push(log);
+      });
+      const results: DemoVolunteerSummary[] = [];
+      for (const vol of volData) {
+        const volLogs = logsByVol[vol.id];
+        if (!volLogs || volLogs.length === 0) continue;
+        const features = extractFeatures(volLogs);
+        const prediction = predictChurn(features);
+        const totalHrs = volLogs.reduce((s, l) => s + Number(l.hours), 0);
+        const crisisCount = volLogs.filter(
+          (l) => l.type === "crisis-response",
+        ).length;
+        results.push({
+          name: vol.name,
+          status:
+            prediction.risk === "high"
+              ? "at-risk"
+              : prediction.risk === "medium"
+                ? "cooling"
+                : "active",
+          last_active_days_ago: features.days_since_last_active,
+          total_hours: totalHrs,
+          total_shifts: volLogs.length,
+          crisis_responses: crisisCount,
+          streak: features.total_shifts_last_30_days,
+          trend:
+            features.hours_trend === "declining"
+              ? "Hours declining from previous month"
+              : features.hours_trend === "increasing"
+                ? "Hours increasing month over month"
+                : "Steady engagement",
+          suggested_action: prediction.suggested_action,
+        });
+      }
+      setVolunteers(results);
+    }
+    computeChurn();
   }, [org]);
 
   const filteredOrgs =
