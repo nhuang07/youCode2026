@@ -1,36 +1,53 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# match-a
 
-## Getting Started
+**Strengthening BC's nonprofit workforce through smart matching, crisis mobilization, retention prediction, and knowledge continuity.**
 
-First, run the development server:
+Built for youCode 2026 — SAP Challenge
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+🔗 [Live Demo](https://match-a-seven.vercel.app)
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## The Problem
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+BC has 29,000 nonprofits contributing $6.7B to the economy. Volunteerism hasn't recovered to pre-pandemic levels and the gap is widening. Organizations are cutting programs because they don't have the people, and when volunteers do leave, their institutional knowledge disappears with them.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Our Solution
 
-## Learn More
+match-a is a four-layer volunteer lifecycle platform:
 
-To learn more about Next.js, take a look at the following resources:
+**Match** — Volunteers complete an onboarding quiz (skills, languages, interests, availability). A weighted compatibility algorithm scores every opportunity against their profile.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+**Mobilize** — When a nonprofit hits a critical gap, they post an urgent request. Matched volunteers receive real-time alerts via Supabase Realtime. One tap to accept.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+**Retain** — A churn prediction engine extracts engagement features (days since active, hours trend, shift frequency, crisis response rate) and classifies volunteers as active, cooling, or at-risk. Coordinators see suggested check-in actions, not raw data.
 
-## Deploy on Vercel
+**Preserve** — When volunteers leave, a handoff document captures their key contacts, recurring tasks, and tips. The next volunteer inherits it.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Tech Stack
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- **Frontend:** Next.js, TypeScript, Tailwind CSS
+- **Backend/Auth/DB:** Supabase (PostgreSQL, Auth, Realtime)
+- **Matching:** Weighted multi-variable compatibility scoring
+- **Retention:** Rule-based churn classifier with feature extraction pipeline
+- **Hosting:** Vercel
+
+## What We Learned
+
+- First time building with Supabase Realtime subscriptions for live crisis alerts
+- Designed and implemented a weighted matching algorithm with 5 scoring dimensions
+- Built a churn prediction pipeline: feature extraction → classification → actionable output
+- Learned role-based auth flows with Supabase Auth
+- One of our team member's first time working with full stack development
+
+## Design Constraints Addressed
+
+- **No IT support:** Coordinator goes from signup to posting a request in under 3 minutes. No configuration.
+- **Accessibility:** Language matching built into the data model. Onboarding uses tappable tags, not forms.
+- **Sustainability:** Rule-based matching with no model decay. Runs identically on day 1 and day 180.
+- **Trust & safety:** Background check field gates sensitive volunteer roles.
+- **Don't rebuild what exists:** Platforms like Better Impact handle scheduling. We fill the gap nobody covers — acute crisis mobilization.
+
+## Team
+
+- Nicholas Huang
+- Shlok Lande 
+- Emily Tu
