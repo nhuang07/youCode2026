@@ -220,9 +220,11 @@ export default function Home() {
         {/* ── Hero — full viewport, split ── */}
         <section
           style={{
+            position: "relative",
             display: "grid",
             gridTemplateColumns: "1fr 1fr",
             height: "100vh",
+            overflow: "hidden",
           }}
         >
           {/* Left — text */}
