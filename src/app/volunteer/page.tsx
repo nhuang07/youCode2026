@@ -323,7 +323,7 @@ export default function VolunteerDashboard() {
   const describeOrgCommitment = (org: Org) =>
     `${org.volunteer_urgency === "Critical" ? "2-3 hrs" : "1-2 hrs"} on ${describeAvailability(org.availability_preference)}`;
   const describeUrgentCommitment = (request: UrgentRequest) =>
-    `${request.duration_hours} hr${request.duration_hours === 1 ? "" : "s"} · ${new Date(request.deadline).toLocaleString([], { weekday: "short", hour: "numeric", minute: "2-digit" })}`;
+    `${request.duration_hours ? `${request.duration_hours} hr${request.duration_hours === 1 ? "" : "s"} · ` : ""}${new Date(request.deadline).toLocaleString([], { weekday: "short", hour: "numeric", minute: "2-digit" })}`;
 
   const addPlannedContribution = (contribution: PlannedContribution) => {
     setPlannedContributions((prev) =>
@@ -354,6 +354,7 @@ export default function VolunteerDashboard() {
 
   const handleAcceptUrgent = async (requestId: string) => {
     const request = urgentRequests.find((item) => item.id === requestId);
+    if (!request || request.people_confirmed >= request.people_needed) return;
     try {
       await supabase.from("urgent_responses").insert({
         urgent_request_id: requestId,
@@ -501,7 +502,14 @@ export default function VolunteerDashboard() {
       (value || "").toLowerCase().includes(normalizedSearch),
     );
 
-  const filteredUrgentRequests = urgentRequests.filter((request) =>
+  const actualUrgent = urgentRequests.filter(
+    (r) => (r as any).is_urgent !== false,
+  );
+  const generalOpportunities = urgentRequests.filter(
+    (r) => (r as any).is_urgent === false,
+  );
+
+  const filteredUrgentRequests = actualUrgent.filter((request) =>
     matchesSearch(
       request.title,
       request.description,
@@ -525,6 +533,17 @@ export default function VolunteerDashboard() {
       org.availability_preference,
       org.skills_needed?.join(" "),
       org.languages_needed?.join(" "),
+    ),
+  );
+
+  const filteredGeneralOpportunities = generalOpportunities.filter((request) =>
+    matchesSearch(
+      request.title,
+      request.description,
+      request.org?.account_name,
+      request.org?.legal_name,
+      request.skills_required?.join(" "),
+      request.languages_required?.join(" "),
     ),
   );
 
@@ -1147,7 +1166,6 @@ export default function VolunteerDashboard() {
               Hover to see more details, then check in when something fits.
             </p>
 
-            {/* Urgent request cards */}
             {filteredUrgentRequests.map((request) => {
               const score = request.org
                 ? computeMatchScore(volunteer, request.org).score
@@ -1158,6 +1176,8 @@ export default function VolunteerDashboard() {
                 1,
                 (request.people_needed || 0) - (request.people_confirmed || 0),
               );
+              const isFull =
+                (request.people_confirmed || 0) >= (request.people_needed || 0);
 
               return (
                 <div
@@ -1299,6 +1319,18 @@ export default function VolunteerDashboard() {
                         >
                           Declined
                         </div>
+                      ) : isFull ? (
+                        <div
+                          className="btn"
+                          style={{
+                            background: "var(--bg-secondary)",
+                            color: "var(--text-muted)",
+                            cursor: "default",
+                            fontSize: "0.8rem",
+                          }}
+                        >
+                          Filled
+                        </div>
                       ) : (
                         <>
                           <button
@@ -1356,6 +1388,211 @@ export default function VolunteerDashboard() {
                         When & length:
                       </strong>{" "}
                       {describeUrgentCommitment(request)}
+                    </div>
+                  </ExpandedDetails>
+                </div>
+              );
+            })}
+
+            {filteredGeneralOpportunities.map((req) => {
+              const score = req.org
+                ? computeMatchScore(volunteer!, req.org).score
+                : 0;
+              const cardId = `gen-${req.id}`;
+              const isHovered = hoveredCard === cardId;
+              const isFull = req.people_confirmed >= req.people_needed;
+
+              return (
+                <div
+                  key={cardId}
+                  className="card card-interactive"
+                  onMouseEnter={() => setHoveredCard(cardId)}
+                  onMouseLeave={() => setHoveredCard(null)}
+                  style={{
+                    padding: "1.5rem",
+                    marginBottom: "1rem",
+                    borderLeft: "4px solid var(--accent-green)",
+                    cursor: "default",
+                    ...cardHoverStyle(isHovered, "var(--accent-green)"),
+                  }}
+                >
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "start",
+                      marginBottom: "0.75rem",
+                    }}
+                  >
+                    <div>
+                      <span className="urgency-badge urgency-low">
+                        Open Request
+                      </span>
+                      <h3
+                        style={{
+                          fontFamily: "var(--font-display)",
+                          fontSize: "1.1rem",
+                          fontWeight: 500,
+                          marginTop: "0.5rem",
+                        }}
+                      >
+                        {req.title}
+                      </h3>
+                      <p
+                        style={{
+                          fontSize: "0.85rem",
+                          color: "var(--text-secondary)",
+                          marginTop: "0.25rem",
+                        }}
+                      >
+                        {req.org?.account_name || req.org?.legal_name} ·{" "}
+                        {req.org?.city || "BC"}
+                      </p>
+                    </div>
+                    <ScoreNumber
+                      value={Math.max(
+                        0,
+                        (req.people_needed || 0) - (req.people_confirmed || 0),
+                      )}
+                      color="var(--accent-green)"
+                      isHovered={isHovered}
+                      unit="spots left"
+                    />
+                  </div>
+
+                  <p
+                    style={{
+                      fontSize: "0.85rem",
+                      color: "var(--text-secondary)",
+                      marginBottom: "1rem",
+                    }}
+                  >
+                    {req.description}
+                  </p>
+
+                  <div
+                    style={{
+                      display: "flex",
+                      gap: "0.4rem",
+                      flexWrap: "wrap",
+                      marginBottom: "1rem",
+                    }}
+                  >
+                    {req.skills_required?.map((skill) => (
+                      <span key={skill} className="tag tag-skill">
+                        {skill}
+                      </span>
+                    ))}
+                    {req.languages_required?.map((language) => (
+                      <span key={language} className="tag tag-language">
+                        {language}
+                      </span>
+                    ))}
+                  </div>
+
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "0.5rem",
+                      }}
+                    >
+                      <ScoreBar
+                        score={score}
+                        color={scoreColor(score)}
+                        animate={isHovered}
+                      />
+                      <span
+                        style={{
+                          fontSize: "0.75rem",
+                          fontWeight: 600,
+                          color: scoreColor(score),
+                          transition: "color 200ms ease",
+                        }}
+                      >
+                        {score}% match
+                      </span>
+                    </div>
+                    <div style={{ display: "flex", gap: "0.5rem" }}>
+                      {respondedRequests[req.id] === "accepted" ? (
+                        <div
+                          className="btn"
+                          style={{
+                            background: "var(--accent-green-light)",
+                            color: "var(--accent-green)",
+                            cursor: "default",
+                            fontSize: "0.8rem",
+                          }}
+                        >
+                          Checked in
+                        </div>
+                      ) : isFull ? (
+                        <div
+                          className="btn"
+                          style={{
+                            background: "var(--bg-secondary)",
+                            color: "var(--text-muted)",
+                            cursor: "default",
+                            fontSize: "0.8rem",
+                          }}
+                        >
+                          Filled
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => handleAcceptUrgent(req.id)}
+                          className="btn btn-primary"
+                          style={{ fontSize: "0.8rem", padding: "8px 16px" }}
+                        >
+                          I Can Help
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  <ExpandedDetails expanded={isHovered}>
+                    <div
+                      style={{
+                        fontSize: "0.8rem",
+                        color: "var(--text-secondary)",
+                      }}
+                    >
+                      <strong style={{ color: "var(--text-primary)" }}>
+                        Location:
+                      </strong>{" "}
+                      {req.is_remote ? "Remote" : req.org?.city || "BC"}
+                    </div>
+                    <div
+                      style={{
+                        fontSize: "0.8rem",
+                        color: "var(--text-secondary)",
+                      }}
+                    >
+                      <strong style={{ color: "var(--text-primary)" }}>
+                        Availability:
+                      </strong>{" "}
+                      {describeAvailability(
+                        req.org?.availability_preference ||
+                          volunteer!.availability,
+                      )}
+                    </div>
+                    <div
+                      style={{
+                        fontSize: "0.8rem",
+                        color: "var(--text-secondary)",
+                      }}
+                    >
+                      <strong style={{ color: "var(--text-primary)" }}>
+                        When:
+                      </strong>{" "}
+                      {describeUrgentCommitment(req)}
                     </div>
                   </ExpandedDetails>
                 </div>

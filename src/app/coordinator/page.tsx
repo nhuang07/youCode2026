@@ -154,6 +154,7 @@ export default function CoordinatorDashboard() {
         background_check_required: org.background_check_required,
         is_remote: false,
         status: "active",
+        is_urgent: true,
       })
       .select();
     if (!error && data) {
@@ -197,6 +198,7 @@ export default function CoordinatorDashboard() {
         background_check_required: org.background_check_required,
         is_remote: false,
         status: "active",
+        is_urgent: false,
       })
       .select();
     if (!error && data) {
@@ -1425,7 +1427,7 @@ export default function CoordinatorDashboard() {
                 style={{
                   padding: "1.5rem",
                   marginBottom: "1rem",
-                  borderLeft: `4px solid ${req.status === "active" ? "var(--urgency-critical)" : "var(--accent-green)"}`,
+                  borderLeft: `4px solid ${(req as any).is_urgent !== false ? "var(--urgency-critical)" : "var(--accent-green)"}`,
                 }}
               >
                 <div
@@ -1438,9 +1440,9 @@ export default function CoordinatorDashboard() {
                 >
                   <div>
                     <span
-                      className={`urgency-badge ${req.status === "active" ? "urgency-critical" : "urgency-low"}`}
+                      className={`urgency-badge ${(req as any).is_urgent !== false ? "urgency-critical" : "urgency-low"}`}
                     >
-                      {req.status === "active" ? "Active" : req.status}
+                      {(req as any).is_urgent !== false ? "Urgent" : "Open"}
                     </span>
                     <h3
                       style={{
