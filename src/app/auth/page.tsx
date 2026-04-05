@@ -1,5 +1,6 @@
 "use client";
 
+import { supabase } from "@/lib/supabase";
 import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -114,7 +115,6 @@ const AVAILABILITY_OPTIONS = [
   "Evenings only",
 ];
 const EXPERIENCE_OPTIONS = ["None", "Some (1–2 orgs)", "Experienced (3+ orgs)"];
-
 
 const initialSurveyState: VolunteerSurveyState = {
   firstName: "",
@@ -516,27 +516,67 @@ function AuthContent() {
     try {
       if (isLogin) {
         if (!email.trim() || !password.trim())
-          throw new Error("Enter any email and password to continue.");
+          throw new Error("Please enter email and password.");
+        if (password.length < 6)
+          throw new Error("Password must be at least 6 characters.");
+        const { error } = await supabase.auth.signInWithPassword({
+          email,
+          password,
+        });
+        if (error) throw error;
         router.push(role === "volunteer" ? "/volunteer" : "/coordinator");
         return;
       }
-      const resolvedName = role === "volunteer" ? volunteerName : name.trim();
+
+      // Signup — account step (just advance to survey)
       if (role === "volunteer" && volunteerSignupStep === "account") {
+        if (password.length < 6)
+          throw new Error("Password must be at least 6 characters.");
         if (!survey.firstName.trim() || !survey.lastName.trim())
           throw new Error("Please enter your first and last name.");
         if (!email.trim() || !password.trim())
-          throw new Error("Enter any email and password to continue.");
+          throw new Error("Please enter email and password.");
         setVolunteerSignupStep("survey");
         return;
       }
-      if (!resolvedName)
-        throw new Error("Please enter your name before creating an account.");
+
+      // Signup — survey step (create account + save profile)
+      const resolvedName = role === "volunteer" ? volunteerName : name.trim();
+      if (!resolvedName) throw new Error("Please enter your name.");
+
       if (role === "volunteer") {
         const err = validateVolunteerSurvey();
         if (err) throw new Error(err);
       } else if (!email.trim() || !password.trim()) {
-        throw new Error("Enter any email and password to continue.");
+        throw new Error("Please enter email and password.");
       }
+
+      // Create Supabase auth account
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email,
+        password,
+        options: { data: { role, name: resolvedName } },
+      });
+      if (authError) throw authError;
+
+      // If volunteer, save profile to volunteers table
+      if (role === "volunteer" && authData.user) {
+        await supabase.from("volunteers").insert({
+          user_id: authData.user.id,
+          name: resolvedName,
+          age: parseInt(survey.age) || null,
+          neighbourhood: survey.neighbourhood,
+          languages: survey.languages,
+          skills: survey.skills,
+          interests: survey.interests,
+          availability: survey.availability,
+          hours_per_month: parseInt(survey.hoursPerMonth) || 8,
+          has_vehicle: survey.hasVehicle || false,
+          has_background_check: false,
+          prior_experience: survey.priorExperience || "None",
+        });
+      }
+
       router.push(role === "volunteer" ? "/volunteer" : "/coordinator");
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Something went wrong");
@@ -983,9 +1023,7 @@ function AuthContent() {
                           gap: "7px",
                           marginTop: "2px",
                         }}
-                      >
-                      
-                      </div>
+                      ></div>
                     </div>
                   </div>
                 </div>

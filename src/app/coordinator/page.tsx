@@ -28,6 +28,7 @@ export default function CoordinatorDashboard() {
     skills: "",
     languages: "",
   });
+  const [coordLoading, setCoordLoading] = useState(true);
   const [generalForm, setGeneralForm] = useState({
     title: "",
     description: "",
@@ -52,6 +53,28 @@ export default function CoordinatorDashboard() {
       setOrgsLoading(false);
     }
     fetchOrgs();
+  }, []);
+
+  useEffect(() => {
+    async function loadCoordinator() {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (!session) {
+        setCoordLoading(false);
+        return;
+      }
+      const { data: coord } = await supabase
+        .from("coordinators")
+        .select("*, orgs(*)")
+        .eq("user_id", session.user.id)
+        .single();
+      if (coord && coord.orgs) {
+        setOrg(coord.orgs as Org);
+      }
+      setCoordLoading(false);
+    }
+    loadCoordinator();
   }, []);
 
   useEffect(() => {
@@ -223,6 +246,26 @@ export default function CoordinatorDashboard() {
     fontFamily: "var(--font-body)",
   };
 
+  if (coordLoading) {
+    return (
+      <div
+        style={{
+          minHeight: "100vh",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          background: "var(--bg-primary)",
+        }}
+      >
+        <p
+          style={{ color: "var(--text-muted)", fontFamily: "var(--font-body)" }}
+        >
+          Loading...
+        </p>
+      </div>
+    );
+  }
+
   // ── Claim screen ──
   if (!org) {
     return (
@@ -295,9 +338,21 @@ export default function CoordinatorDashboard() {
                 {filteredOrgs.map((o) => (
                   <button
                     key={o.id}
-                    onClick={() => {
+                    onClick={async () => {
                       setOrg(o);
                       setClaimSearch("");
+                      const {
+                        data: { session },
+                      } = await supabase.auth.getSession();
+                      if (session) {
+                        await supabase.from("coordinators").insert({
+                          user_id: session.user.id,
+                          org_id: o.id,
+                          name:
+                            session.user.user_metadata?.name || "Coordinator",
+                          email: session.user.email,
+                        });
+                      }
                     }}
                     style={{
                       width: "100%",
@@ -1170,7 +1225,7 @@ export default function CoordinatorDashboard() {
                         onChange={(e) =>
                           setUrgentForm({
                             ...urgentForm,
-                            people_needed: parseInt(e.target.value),
+                            people_needed: parseInt(e.target.value) || 1,
                           })
                         }
                         style={inputStyle}
@@ -1320,7 +1375,7 @@ export default function CoordinatorDashboard() {
                         onChange={(e) =>
                           setGeneralForm({
                             ...generalForm,
-                            people_needed: parseInt(e.target.value),
+                            people_needed: parseInt(e.target.value) || 1,
                           })
                         }
                         style={inputStyle}

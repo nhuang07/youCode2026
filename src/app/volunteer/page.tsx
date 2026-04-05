@@ -4,7 +4,11 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 import { Org, Volunteer, UrgentRequest } from "@/lib/types";
-import { computeMatchScore, rankOpportunitiesForVolunteer } from "@/lib/matching";
+import {
+  computeMatchScore,
+  rankOpportunitiesForVolunteer,
+} from "@/lib/matching";
+import { useRouter } from "next/navigation";
 
 type Tab = "browse" | "plans" | "impact" | "handoffs";
 
@@ -25,31 +29,12 @@ type PlannedContribution = {
   type: "urgent" | "opportunity";
 };
 
-const DEMO_VOLUNTEER: Volunteer = {
-  id: "demo",
-  user_id: null,
-  name: "Demo Volunteer",
-  age: 24,
-  neighbourhood: "Kitsilano",
-  languages: ["English", "Mandarin"],
-  skills: [
-    "Driving/transportation",
-    "Tutoring/mentorship",
-    "Translation/interpretation",
-    "Event coordination",
-  ],
-  interests: ["Food security", "Newcomer & immigrant support", "Youth services"],
-  availability: "Flexible / as needed",
-  hours_per_month: 12,
-  has_vehicle: true,
-  has_background_check: true,
-  prior_experience: "Some (1-2 orgs)",
-  created_at: new Date().toISOString(),
-};
-
 // ── Card hover style helper ───────────────────────────────────────
 // Lifts the card, deepens the shadow, and "glows" the left border via box-shadow.
-function cardHoverStyle(isHovered: boolean, accentColor: string): React.CSSProperties {
+function cardHoverStyle(
+  isHovered: boolean,
+  accentColor: string,
+): React.CSSProperties {
   return {
     transform: isHovered ? "translateY(-3px)" : "translateY(0px)",
     boxShadow: isHovered
@@ -62,12 +47,31 @@ function cardHoverStyle(isHovered: boolean, accentColor: string): React.CSSPrope
 }
 
 // ── Score bar — stretches to full value on hover ──────────────────
-function ScoreBar({ score, color, animate }: { score: number; color: string; animate: boolean }) {
+function ScoreBar({
+  score,
+  color,
+  animate,
+}: {
+  score: number;
+  color: string;
+  animate: boolean;
+}) {
   const [mounted, setMounted] = useState(false);
-  useEffect(() => { const t = setTimeout(() => setMounted(true), 80); return () => clearTimeout(t); }, []);
+  useEffect(() => {
+    const t = setTimeout(() => setMounted(true), 80);
+    return () => clearTimeout(t);
+  }, []);
 
   return (
-    <div style={{ width: "6rem", height: "5px", borderRadius: "4px", background: "var(--border-light)", overflow: "hidden" }}>
+    <div
+      style={{
+        width: "6rem",
+        height: "5px",
+        borderRadius: "4px",
+        background: "var(--border-light)",
+        overflow: "hidden",
+      }}
+    >
       <div
         style={{
           height: "100%",
@@ -85,8 +89,16 @@ function ScoreBar({ score, color, animate }: { score: number; color: string; ani
 
 // ── Score/number — pops on hover with a spring scale ─────────────
 function ScoreNumber({
-  value, color, isHovered, unit,
-}: { value: number; color: string; isHovered: boolean; unit?: string }) {
+  value,
+  color,
+  isHovered,
+  unit,
+}: {
+  value: number;
+  color: string;
+  isHovered: boolean;
+  unit?: string;
+}) {
   return (
     <div style={{ textAlign: "right" }}>
       <span
@@ -97,20 +109,35 @@ function ScoreNumber({
           color,
           display: "inline-block",
           transform: isHovered ? "scale(1.14)" : "scale(1)",
-          transition: "transform 300ms cubic-bezier(0.34, 1.56, 0.64, 1), color 200ms ease",
+          transition:
+            "transform 300ms cubic-bezier(0.34, 1.56, 0.64, 1), color 200ms ease",
         }}
       >
         {value}
       </span>
       {unit && (
-        <div style={{ fontSize: "0.7rem", color: "var(--text-muted)", marginTop: "2px" }}>{unit}</div>
+        <div
+          style={{
+            fontSize: "0.7rem",
+            color: "var(--text-muted)",
+            marginTop: "2px",
+          }}
+        >
+          {unit}
+        </div>
       )}
     </div>
   );
 }
 
 // ── Expandable details — grid-template-rows trick (no maxHeight jank) ──
-function ExpandedDetails({ expanded, children }: { expanded: boolean; children: React.ReactNode }) {
+function ExpandedDetails({
+  expanded,
+  children,
+}: {
+  expanded: boolean;
+  children: React.ReactNode;
+}) {
   return (
     <div
       style={{
@@ -119,7 +146,9 @@ function ExpandedDetails({ expanded, children }: { expanded: boolean; children: 
         opacity: expanded ? 1 : 0,
         marginTop: expanded ? "1rem" : "0",
         paddingTop: expanded ? "1rem" : "0",
-        borderTop: expanded ? "1px solid var(--border-light)" : "1px solid transparent",
+        borderTop: expanded
+          ? "1px solid var(--border-light)"
+          : "1px solid transparent",
         transition:
           "grid-template-rows 320ms cubic-bezier(0.4, 0, 0.2, 1), opacity 260ms ease, margin 320ms ease, padding 320ms ease, border-color 200ms ease",
       }}
@@ -140,25 +169,51 @@ function ExpandedDetails({ expanded, children }: { expanded: boolean; children: 
 }
 
 export default function VolunteerDashboard() {
+  const router = useRouter();
+  const [volunteer, setVolunteer] = useState<Volunteer | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  const [onboardingForm, setOnboardingForm] = useState({
+    name: "",
+    age: "",
+    neighbourhood: "",
+    languages: [] as string[],
+    skills: [] as string[],
+    interests: [] as string[],
+    availability: "",
+    hours_per_month: 8,
+    has_vehicle: false,
+    has_background_check: false,
+  });
   const [activeTab, setActiveTab] = useState<Tab>("browse");
   const [searchQuery, setSearchQuery] = useState("");
   const [orgs, setOrgs] = useState<Org[]>([]);
-  const [urgentRequests, setUrgentRequests] = useState<(UrgentRequest & { org?: Org })[]>([]);
+  const [urgentRequests, setUrgentRequests] = useState<
+    (UrgentRequest & { org?: Org })[]
+  >([]);
   const [rankedOrgs, setRankedOrgs] = useState<RankedOrg[]>([]);
   const [loading, setLoading] = useState(true);
-  const [respondedRequests, setRespondedRequests] = useState<Record<string, "accepted" | "declined">>({});
-  const [plannedContributions, setPlannedContributions] = useState<PlannedContribution[]>([]);
+  const [respondedRequests, setRespondedRequests] = useState<
+    Record<string, "accepted" | "declined">
+  >({});
+  const [plannedContributions, setPlannedContributions] = useState<
+    PlannedContribution[]
+  >([]);
   const [hoveredCard, setHoveredCard] = useState<string | null>(null);
-  const [hoveredCancelPlan, setHoveredCancelPlan] = useState<string | null>(null);
+  const [hoveredCancelPlan, setHoveredCancelPlan] = useState<string | null>(
+    null,
+  );
   const [impactChartReady, setImpactChartReady] = useState(false);
-  const volunteer = DEMO_VOLUNTEER;
   const impactSlices = [
     { company: "Harvest of Hope Society", hours: 9, color: "#5f7f52" },
     { company: "Immigrant Services Society", hours: 6, color: "#cf5f5f" },
     { company: "South Van Neighbourhood House", hours: 5, color: "#d6a548" },
     { company: "Youth Futures Hub", hours: 4, color: "#6f8f7f" },
   ];
-  const totalImpactHours = impactSlices.reduce((sum, slice) => sum + slice.hours, 0);
+  const totalImpactHours = impactSlices.reduce(
+    (sum, slice) => sum + slice.hours,
+    0,
+  );
   const impactChartSize = 220;
   const impactRadius = 82;
   const impactStrokeWidth = 56;
@@ -177,16 +232,88 @@ export default function VolunteerDashboard() {
     },
     {
       offset: 0,
-      items: [] as Array<(typeof impactSlices)[number] & { length: number; offset: number; percent: number }>,
+      items: [] as Array<
+        (typeof impactSlices)[number] & {
+          length: number;
+          offset: number;
+          percent: number;
+        }
+      >,
     },
   ).items;
 
+  // ── Auth + profile loading ──
+  useEffect(() => {
+    async function loadProfile() {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (!session) {
+        router.push("/auth?role=volunteer");
+        return;
+      }
+      const { data: vol } = await supabase
+        .from("volunteers")
+        .select("*")
+        .eq("user_id", session.user.id)
+        .single();
+      if (vol) {
+        setVolunteer(vol as Volunteer);
+      } else {
+        setShowOnboarding(true);
+      }
+      setAuthLoading(false);
+    }
+    loadProfile();
+  }, [router]);
+
+  const handleOnboardingSubmit = async () => {
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+    if (!session) return;
+    const { data, error } = await supabase
+      .from("volunteers")
+      .insert({
+        user_id: session.user.id,
+        name: onboardingForm.name,
+        age: parseInt(onboardingForm.age) || null,
+        neighbourhood: onboardingForm.neighbourhood,
+        languages: onboardingForm.languages,
+        skills: onboardingForm.skills,
+        interests: onboardingForm.interests,
+        availability: onboardingForm.availability,
+        hours_per_month: onboardingForm.hours_per_month,
+        has_vehicle: onboardingForm.has_vehicle,
+        has_background_check: onboardingForm.has_background_check,
+        prior_experience: "None",
+      })
+      .select()
+      .single();
+    if (!error && data) {
+      setVolunteer(data as Volunteer);
+      setShowOnboarding(false);
+    }
+  };
+
   const urgencyColor = (urgency: string) =>
-    ({ Critical: "var(--urgency-critical)", High: "var(--urgency-high)", Medium: "var(--urgency-medium)" }[urgency] || "var(--urgency-low)");
+    ({
+      Critical: "var(--urgency-critical)",
+      High: "var(--urgency-high)",
+      Medium: "var(--urgency-medium)",
+    })[urgency] || "var(--urgency-low)";
   const urgencyClass = (urgency: string) =>
-    ({ Critical: "urgency-critical", High: "urgency-high", Medium: "urgency-medium" }[urgency] || "urgency-low");
+    ({
+      Critical: "urgency-critical",
+      High: "urgency-high",
+      Medium: "urgency-medium",
+    })[urgency] || "urgency-low";
   const scoreColor = (score: number) =>
-    score >= 60 ? "var(--accent-green)" : score >= 35 ? "var(--urgency-medium)" : "var(--urgency-high)";
+    score >= 60
+      ? "var(--accent-green)"
+      : score >= 35
+        ? "var(--urgency-medium)"
+        : "var(--urgency-high)";
   const describeAvailability = (value: string) => {
     if (value === "Flexible / as needed") return "Flexible, short notice";
     if (value === "Weekdays only") return "Weekdays";
@@ -200,7 +327,9 @@ export default function VolunteerDashboard() {
 
   const addPlannedContribution = (contribution: PlannedContribution) => {
     setPlannedContributions((prev) =>
-      prev.some((item) => item.id === contribution.id) ? prev : [contribution, ...prev]
+      prev.some((item) => item.id === contribution.id)
+        ? prev
+        : [contribution, ...prev],
     );
   };
 
@@ -208,13 +337,17 @@ export default function VolunteerDashboard() {
     setPlannedContributions((prev) => prev.filter((item) => item.id !== id));
     if (id.startsWith("urgent-")) {
       const requestId = id.replace("urgent-", "");
-      setRespondedRequests((prev) => { const next = { ...prev }; delete next[requestId]; return next; });
+      setRespondedRequests((prev) => {
+        const next = { ...prev };
+        delete next[requestId];
+        return next;
+      });
       setUrgentRequests((prev) =>
         prev.map((item) =>
           item.id === requestId && item.people_confirmed > 0
             ? { ...item, people_confirmed: item.people_confirmed - 1 }
-            : item
-        )
+            : item,
+        ),
       );
     }
   };
@@ -223,23 +356,36 @@ export default function VolunteerDashboard() {
     const request = urgentRequests.find((item) => item.id === requestId);
     try {
       await supabase.from("urgent_responses").insert({
-        urgent_request_id: requestId, volunteer_id: volunteer.id,
-        status: "accepted", responded_at: new Date().toISOString(),
+        urgent_request_id: requestId,
+        volunteer_id: volunteer!.id,
+        status: "accepted",
+        responded_at: new Date().toISOString(),
       });
-    } catch { /* demo fallback */ }
+    } catch {
+      /* demo fallback */
+    }
 
     if (request) {
       setUrgentRequests((prev) =>
-        prev.map((item) => item.id === requestId ? { ...item, people_confirmed: (item.people_confirmed || 0) + 1 } : item)
+        prev.map((item) =>
+          item.id === requestId
+            ? { ...item, people_confirmed: (item.people_confirmed || 0) + 1 }
+            : item,
+        ),
       );
       addPlannedContribution({
         id: `urgent-${request.id}`,
         title: request.title,
-        orgName: request.org?.account_name || request.org?.legal_name || "Organization",
+        orgName:
+          request.org?.account_name ||
+          request.org?.legal_name ||
+          "Organization",
         location: request.is_remote ? "Remote" : request.org?.city || "BC",
         timing: describeUrgentCommitment(request),
         details: request.description,
-        match: request.org ? computeMatchScore(volunteer, request.org).score : 0,
+        match: request.org
+          ? computeMatchScore(volunteer!, request.org).score
+          : 0,
         type: "urgent",
       });
     }
@@ -250,10 +396,14 @@ export default function VolunteerDashboard() {
   const handleDeclineUrgent = async (requestId: string) => {
     try {
       await supabase.from("urgent_responses").insert({
-        urgent_request_id: requestId, volunteer_id: volunteer.id,
-        status: "declined", responded_at: new Date().toISOString(),
+        urgent_request_id: requestId,
+        volunteer_id: volunteer!.id,
+        status: "declined",
+        responded_at: new Date().toISOString(),
       });
-    } catch { /* demo fallback */ }
+    } catch {
+      /* demo fallback */
+    }
     setRespondedRequests((prev) => ({ ...prev, [requestId]: "declined" }));
   };
 
@@ -272,15 +422,24 @@ export default function VolunteerDashboard() {
   };
 
   useEffect(() => {
+    if (!volunteer) return;
     async function fetchData() {
       setLoading(true);
       const { data: orgData } = await supabase.from("orgs").select("*");
       const fetchedOrgs = (orgData || []) as Org[];
       setOrgs(fetchedOrgs);
-      setRankedOrgs(rankOpportunitiesForVolunteer(volunteer, fetchedOrgs));
-      const { data: urgentData } = await supabase.from("urgent_requests").select("*").eq("status", "active");
+      setRankedOrgs(rankOpportunitiesForVolunteer(volunteer!, fetchedOrgs));
+      const { data: urgentData } = await supabase
+        .from("urgent_requests")
+        .select("*")
+        .eq("status", "active");
       if (urgentData && urgentData.length > 0) {
-        setUrgentRequests((urgentData as UrgentRequest[]).map((r) => ({ ...r, org: fetchedOrgs.find((o) => o.id === r.org_id) })));
+        setUrgentRequests(
+          (urgentData as UrgentRequest[]).map((r) => ({
+            ...r,
+            org: fetchedOrgs.find((o) => o.id === r.org_id),
+          })),
+        );
       }
       setLoading(false);
     }
@@ -288,20 +447,35 @@ export default function VolunteerDashboard() {
 
     const channel = supabase
       .channel("urgent-requests")
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "urgent_requests" }, (payload) => {
-        const r = payload.new as UrgentRequest;
-        setUrgentRequests((prev) => [{ ...r, org: orgs.find((o) => o.id === r.org_id) }, ...prev]);
-      })
-      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "urgent_requests" }, (payload) => {
-        const updated = payload.new as UrgentRequest;
-        setUrgentRequests((prev) =>
-          prev.map((r) => r.id === updated.id ? { ...r, ...updated, org: r.org } : r)
-        );
-      })
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "urgent_requests" },
+        (payload) => {
+          const r = payload.new as UrgentRequest;
+          setUrgentRequests((prev) => [
+            { ...r, org: orgs.find((o) => o.id === r.org_id) },
+            ...prev,
+          ]);
+        },
+      )
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "urgent_requests" },
+        (payload) => {
+          const updated = payload.new as UrgentRequest;
+          setUrgentRequests((prev) =>
+            prev.map((r) =>
+              r.id === updated.id ? { ...r, ...updated, org: r.org } : r,
+            ),
+          );
+        },
+      )
       .subscribe();
-    return () => { supabase.removeChannel(channel); };
+    return () => {
+      supabase.removeChannel(channel);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [volunteer]);
 
   useEffect(() => {
     if (activeTab !== "impact") {
@@ -323,7 +497,9 @@ export default function VolunteerDashboard() {
   const normalizedSearch = searchQuery.trim().toLowerCase();
   const matchesSearch = (...values: Array<string | undefined | null>) =>
     normalizedSearch.length === 0 ||
-    values.some((value) => (value || "").toLowerCase().includes(normalizedSearch));
+    values.some((value) =>
+      (value || "").toLowerCase().includes(normalizedSearch),
+    );
 
   const filteredUrgentRequests = urgentRequests.filter((request) =>
     matchesSearch(
@@ -335,7 +511,7 @@ export default function VolunteerDashboard() {
       request.org?.availability_preference,
       request.skills_required?.join(" "),
       request.languages_required?.join(" "),
-    )
+    ),
   );
 
   const filteredRankedOrgs = rankedOrgs.filter(({ org }) =>
@@ -349,98 +525,633 @@ export default function VolunteerDashboard() {
       org.availability_preference,
       org.skills_needed?.join(" "),
       org.languages_needed?.join(" "),
-    )
+    ),
   );
 
   const filteredPlannedContributions = plannedContributions.filter((item) =>
-    matchesSearch(item.title, item.orgName, item.location, item.timing, item.details)
+    matchesSearch(
+      item.title,
+      item.orgName,
+      item.location,
+      item.timing,
+      item.details,
+    ),
   );
 
   if (loading) {
     return (
-      <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "var(--bg-primary)" }}>
-        <p style={{ color: "var(--text-muted)", fontFamily: "var(--font-body)" }}>Loading your dashboard...</p>
+      <div
+        style={{
+          minHeight: "100vh",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          background: "var(--bg-primary)",
+        }}
+      >
+        <p
+          style={{ color: "var(--text-muted)", fontFamily: "var(--font-body)" }}
+        >
+          Loading your dashboard...
+        </p>
       </div>
     );
   }
 
-  return (
-    <div style={{ minHeight: "100vh", background: "var(--bg-primary)", fontFamily: "var(--font-body)" }}>
+  if (authLoading) {
+    return (
+      <div
+        style={{
+          minHeight: "100vh",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          background: "var(--bg-primary)",
+        }}
+      >
+        <p
+          style={{ color: "var(--text-muted)", fontFamily: "var(--font-body)" }}
+        >
+          Loading...
+        </p>
+      </div>
+    );
+  }
 
+  if (showOnboarding || !volunteer) {
+    const SKILL_OPTIONS = [
+      "Driving/transportation",
+      "Tutoring/mentorship",
+      "Translation/interpretation",
+      "Event coordination",
+      "Cooking/food prep",
+      "Administrative support",
+      "Mental health support",
+      "First aid/CPR",
+      "Photography",
+      "Social media",
+      "Data entry",
+      "Grant writing",
+      "IT support",
+      "Arts facilitation",
+      "Outreach/community engagement",
+      "Teaching/training",
+      "Elder care",
+      "Childcare support",
+    ];
+    const INTEREST_OPTIONS = [
+      "Food security",
+      "Youth services",
+      "Senior services",
+      "Mental health",
+      "Housing & homelessness",
+      "Newcomer & immigrant support",
+      "Arts & culture",
+      "Environment",
+      "Women & gender equity",
+      "Indigenous services",
+      "Disability services",
+      "Community health",
+      "Education & literacy",
+      "Anti-poverty",
+    ];
+    const LANGUAGE_OPTIONS = [
+      "English",
+      "Mandarin",
+      "Cantonese",
+      "Punjabi",
+      "Tagalog",
+      "Vietnamese",
+      "Korean",
+      "Spanish",
+      "French",
+      "Arabic",
+      "Hindi",
+      "Farsi",
+      "Somali",
+      "Tigrinya",
+    ];
+    const AVAILABILITY_OPTIONS = [
+      "Flexible / as needed",
+      "Weekday mornings",
+      "Weekday afternoons",
+      "Weekday evenings",
+      "Weekends only",
+      "Weekend mornings",
+      "Weekend afternoons",
+      "Evenings only",
+    ];
+    const toggleArray = (arr: string[], item: string) =>
+      arr.includes(item) ? arr.filter((x) => x !== item) : [...arr, item];
+    const inputStyle: React.CSSProperties = {
+      width: "100%",
+      padding: "0.7rem 1rem",
+      borderRadius: "var(--radius-md)",
+      border: "1.5px solid var(--border-light)",
+      background: "var(--bg-primary)",
+      fontSize: "0.9rem",
+      fontFamily: "var(--font-body)",
+      color: "var(--text-primary)",
+      outline: "none",
+    };
+
+    return (
+      <div
+        style={{
+          minHeight: "100vh",
+          background: "var(--bg-primary)",
+          fontFamily: "var(--font-body)",
+          display: "flex",
+          justifyContent: "center",
+          padding: "3rem 1.5rem",
+        }}
+      >
+        <div style={{ maxWidth: "580px", width: "100%" }}>
+          <div style={{ marginBottom: "2rem" }}>
+            <div
+              style={{
+                fontFamily: "var(--font-display)",
+                fontSize: "1.6rem",
+                fontWeight: 500,
+                letterSpacing: "-0.02em",
+                marginBottom: "0.25rem",
+              }}
+            >
+              match-
+              <em style={{ color: "var(--accent-green)", fontStyle: "italic" }}>
+                a
+              </em>
+              -volunteer
+            </div>
+            <p style={{ fontSize: "0.9rem", color: "var(--text-secondary)" }}>
+              Tell us about yourself so we can find the right opportunities.
+            </p>
+          </div>
+          <div className="card" style={{ padding: "2rem" }}>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "2fr 1fr",
+                gap: "1rem",
+                marginBottom: "1.25rem",
+              }}
+            >
+              <div>
+                <label
+                  style={{
+                    display: "block",
+                    fontSize: "0.8rem",
+                    fontWeight: 600,
+                    marginBottom: "0.4rem",
+                    color: "var(--text-secondary)",
+                  }}
+                >
+                  Your name
+                </label>
+                <input
+                  type="text"
+                  value={onboardingForm.name}
+                  onChange={(e) =>
+                    setOnboardingForm({
+                      ...onboardingForm,
+                      name: e.target.value,
+                    })
+                  }
+                  style={inputStyle}
+                  placeholder="Full name"
+                />
+              </div>
+              <div>
+                <label
+                  style={{
+                    display: "block",
+                    fontSize: "0.8rem",
+                    fontWeight: 600,
+                    marginBottom: "0.4rem",
+                    color: "var(--text-secondary)",
+                  }}
+                >
+                  Age
+                </label>
+                <input
+                  type="number"
+                  value={onboardingForm.age}
+                  onChange={(e) =>
+                    setOnboardingForm({
+                      ...onboardingForm,
+                      age: e.target.value,
+                    })
+                  }
+                  style={inputStyle}
+                />
+              </div>
+            </div>
+            <div style={{ marginBottom: "1.25rem" }}>
+              <label
+                style={{
+                  display: "block",
+                  fontSize: "0.8rem",
+                  fontWeight: 600,
+                  marginBottom: "0.4rem",
+                  color: "var(--text-secondary)",
+                }}
+              >
+                Neighbourhood
+              </label>
+              <input
+                type="text"
+                value={onboardingForm.neighbourhood}
+                onChange={(e) =>
+                  setOnboardingForm({
+                    ...onboardingForm,
+                    neighbourhood: e.target.value,
+                  })
+                }
+                style={inputStyle}
+                placeholder="e.g. Kitsilano"
+              />
+            </div>
+            <div style={{ marginBottom: "1.25rem" }}>
+              <label
+                style={{
+                  display: "block",
+                  fontSize: "0.8rem",
+                  fontWeight: 600,
+                  marginBottom: "0.5rem",
+                  color: "var(--text-secondary)",
+                }}
+              >
+                Languages you speak
+              </label>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "0.4rem" }}>
+                {LANGUAGE_OPTIONS.map((l) => (
+                  <button
+                    key={l}
+                    type="button"
+                    onClick={() =>
+                      setOnboardingForm({
+                        ...onboardingForm,
+                        languages: toggleArray(onboardingForm.languages, l),
+                      })
+                    }
+                    className={`tag ${onboardingForm.languages.includes(l) ? "tag-selected" : ""}`}
+                    style={{ cursor: "pointer", border: "none" }}
+                  >
+                    {l}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div style={{ marginBottom: "1.25rem" }}>
+              <label
+                style={{
+                  display: "block",
+                  fontSize: "0.8rem",
+                  fontWeight: 600,
+                  marginBottom: "0.5rem",
+                  color: "var(--text-secondary)",
+                }}
+              >
+                Causes you care about
+              </label>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "0.4rem" }}>
+                {INTEREST_OPTIONS.map((i) => (
+                  <button
+                    key={i}
+                    type="button"
+                    onClick={() =>
+                      setOnboardingForm({
+                        ...onboardingForm,
+                        interests: toggleArray(onboardingForm.interests, i),
+                      })
+                    }
+                    className={`tag ${onboardingForm.interests.includes(i) ? "tag-selected" : ""}`}
+                    style={{ cursor: "pointer", border: "none" }}
+                  >
+                    {i}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div style={{ marginBottom: "1.25rem" }}>
+              <label
+                style={{
+                  display: "block",
+                  fontSize: "0.8rem",
+                  fontWeight: 600,
+                  marginBottom: "0.5rem",
+                  color: "var(--text-secondary)",
+                }}
+              >
+                Skills you can offer
+              </label>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "0.4rem" }}>
+                {SKILL_OPTIONS.map((s) => (
+                  <button
+                    key={s}
+                    type="button"
+                    onClick={() =>
+                      setOnboardingForm({
+                        ...onboardingForm,
+                        skills: toggleArray(onboardingForm.skills, s),
+                      })
+                    }
+                    className={`tag ${onboardingForm.skills.includes(s) ? "tag-selected" : ""}`}
+                    style={{ cursor: "pointer", border: "none" }}
+                  >
+                    {s}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div style={{ marginBottom: "1.25rem" }}>
+              <label
+                style={{
+                  display: "block",
+                  fontSize: "0.8rem",
+                  fontWeight: 600,
+                  marginBottom: "0.5rem",
+                  color: "var(--text-secondary)",
+                }}
+              >
+                When are you available?
+              </label>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "0.4rem" }}>
+                {AVAILABILITY_OPTIONS.map((a) => (
+                  <button
+                    key={a}
+                    type="button"
+                    onClick={() =>
+                      setOnboardingForm({ ...onboardingForm, availability: a })
+                    }
+                    className={`tag ${onboardingForm.availability === a ? "tag-selected" : ""}`}
+                    style={{ cursor: "pointer", border: "none" }}
+                  >
+                    {a}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "1fr 1fr 1fr",
+                gap: "1rem",
+                marginBottom: "1.5rem",
+              }}
+            >
+              <div>
+                <label
+                  style={{
+                    display: "block",
+                    fontSize: "0.8rem",
+                    fontWeight: 600,
+                    marginBottom: "0.4rem",
+                    color: "var(--text-secondary)",
+                  }}
+                >
+                  Hours/month
+                </label>
+                <input
+                  type="number"
+                  min={1}
+                  value={onboardingForm.hours_per_month}
+                  onChange={(e) =>
+                    setOnboardingForm({
+                      ...onboardingForm,
+                      hours_per_month: parseInt(e.target.value) || 1,
+                    })
+                  }
+                  style={inputStyle}
+                />
+              </div>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "end",
+                  gap: "0.5rem",
+                  paddingBottom: "0.25rem",
+                }}
+              >
+                <input
+                  type="checkbox"
+                  checked={onboardingForm.has_vehicle}
+                  onChange={(e) =>
+                    setOnboardingForm({
+                      ...onboardingForm,
+                      has_vehicle: e.target.checked,
+                    })
+                  }
+                />
+                <label
+                  style={{ fontSize: "0.8rem", color: "var(--text-secondary)" }}
+                >
+                  Vehicle
+                </label>
+              </div>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "end",
+                  gap: "0.5rem",
+                  paddingBottom: "0.25rem",
+                }}
+              >
+                <input
+                  type="checkbox"
+                  checked={onboardingForm.has_background_check}
+                  onChange={(e) =>
+                    setOnboardingForm({
+                      ...onboardingForm,
+                      has_background_check: e.target.checked,
+                    })
+                  }
+                />
+                <label
+                  style={{ fontSize: "0.8rem", color: "var(--text-secondary)" }}
+                >
+                  Background check
+                </label>
+              </div>
+            </div>
+            <button
+              onClick={handleOnboardingSubmit}
+              className="btn btn-primary"
+              style={{ width: "100%" }}
+              disabled={
+                !onboardingForm.name ||
+                onboardingForm.languages.length === 0 ||
+                onboardingForm.interests.length === 0
+              }
+            >
+              Find my matches
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!volunteer) return null;
+
+  return (
+    <div
+      style={{
+        minHeight: "100vh",
+        background: "var(--bg-primary)",
+        fontFamily: "var(--font-body)",
+      }}
+    >
       {/* ── Nav ── */}
-      <nav style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "1rem 1.5rem", borderBottom: "1px solid var(--border-light)" }}>
-        <Link href="/" style={{ fontFamily: "var(--font-display)", fontSize: "1.4rem", fontWeight: 500, letterSpacing: "-0.02em", color: "var(--text-primary)", textDecoration: "none" }}>
-          match-<em style={{ color: "var(--accent-green)", fontStyle: "italic" }}>a</em>
+      <nav
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          padding: "1rem 1.5rem",
+          borderBottom: "1px solid var(--border-light)",
+        }}
+      >
+        <Link
+          href="/"
+          style={{
+            fontFamily: "var(--font-display)",
+            fontSize: "1.4rem",
+            fontWeight: 500,
+            letterSpacing: "-0.02em",
+            color: "var(--text-primary)",
+            textDecoration: "none",
+          }}
+        >
+          match-
+          <em style={{ color: "var(--accent-green)", fontStyle: "italic" }}>
+            a
+          </em>
         </Link>
         <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
-          <span style={{ fontSize: "0.85rem", color: "var(--text-secondary)" }}>{volunteer.name}</span>
-          <Link href="/" className="btn btn-ghost" style={{ fontSize: "0.8rem", padding: "8px 14px" }}>Sign Out</Link>
+          <span style={{ fontSize: "0.85rem", color: "var(--text-secondary)" }}>
+            {volunteer.name}
+          </span>
+          <Link
+            href="/"
+            className="btn btn-ghost"
+            style={{ fontSize: "0.8rem", padding: "8px 14px" }}
+          >
+            Sign Out
+          </Link>
         </div>
       </nav>
 
       {/* ── Tabs ── */}
-      <div style={{ display: "flex", gap: "4px", padding: "1rem 1.5rem 0", borderBottom: "1px solid var(--border-light)" }}>
+      <div
+        style={{
+          display: "flex",
+          gap: "4px",
+          padding: "1rem 1.5rem 0",
+          borderBottom: "1px solid var(--border-light)",
+        }}
+      >
         {tabs.map((tab) => (
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
             style={{
-              position: "relative", padding: "0.6rem 1rem",
-              fontSize: "0.85rem", fontWeight: 500, fontFamily: "var(--font-body)",
-              color: activeTab === tab.id ? "var(--accent-green)" : "var(--text-muted)",
-              borderBottom: activeTab === tab.id ? "2px solid var(--accent-green)" : "2px solid transparent",
-              background: "none", borderTop: "none", borderLeft: "none", borderRight: "none",
-              cursor: "pointer", transition: "color 180ms ease",
+              position: "relative",
+              padding: "0.6rem 1rem",
+              fontSize: "0.85rem",
+              fontWeight: 500,
+              fontFamily: "var(--font-body)",
+              color:
+                activeTab === tab.id
+                  ? "var(--accent-green)"
+                  : "var(--text-muted)",
+              borderBottom:
+                activeTab === tab.id
+                  ? "2px solid var(--accent-green)"
+                  : "2px solid transparent",
+              background: "none",
+              borderTop: "none",
+              borderLeft: "none",
+              borderRight: "none",
+              cursor: "pointer",
+              transition: "color 180ms ease",
             }}
           >
             {tab.label}
             {tab.alert && (
-              <span style={{ position: "absolute", top: 2, right: 2, width: 7, height: 7, borderRadius: "50%", background: "var(--urgency-critical)" }} />
+              <span
+                style={{
+                  position: "absolute",
+                  top: 2,
+                  right: 2,
+                  width: 7,
+                  height: 7,
+                  borderRadius: "50%",
+                  background: "var(--urgency-critical)",
+                }}
+              />
             )}
           </button>
         ))}
       </div>
 
-      <div style={{ maxWidth: "860px", margin: "0 auto", padding: "2rem 1.5rem" }}>
+      <div
+        style={{ maxWidth: "860px", margin: "0 auto", padding: "2rem 1.5rem" }}
+      >
         {(activeTab === "browse" || activeTab === "plans") && (
-        <div style={{ marginBottom: "1.5rem" }}>
-          <input
-            type="search"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder={
-              activeTab === "plans"
-                ? "Search your plans"
-                : "Search organizations, skills, locations..."
-            }
-            style={{
-              width: "100%",
-              padding: "12px 14px",
-              borderRadius: "12px",
-              border: "1.5px solid var(--border-light)",
-              background: "var(--bg-card)",
-              fontSize: "0.9rem",
-              color: "var(--text-primary)",
-              outline: "none",
-              boxShadow: "var(--shadow-sm)",
-            }}
-          />
-        </div>
+          <div style={{ marginBottom: "1.5rem" }}>
+            <input
+              type="search"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder={
+                activeTab === "plans"
+                  ? "Search your plans"
+                  : "Search organizations, skills, locations..."
+              }
+              style={{
+                width: "100%",
+                padding: "12px 14px",
+                borderRadius: "12px",
+                border: "1.5px solid var(--border-light)",
+                background: "var(--bg-card)",
+                fontSize: "0.9rem",
+                color: "var(--text-primary)",
+                outline: "none",
+                boxShadow: "var(--shadow-sm)",
+              }}
+            />
+          </div>
         )}
 
         {/* ══ BROWSE ══ */}
         {activeTab === "browse" && (
           <div>
-            <h2 style={{ fontFamily: "var(--font-display)", fontSize: "1.5rem", fontWeight: 500, marginBottom: "0.25rem" }}>
+            <h2
+              style={{
+                fontFamily: "var(--font-display)",
+                fontSize: "1.5rem",
+                fontWeight: 500,
+                marginBottom: "0.25rem",
+              }}
+            >
               Browse ways to help
             </h2>
-            <p style={{ fontSize: "0.85rem", color: "var(--text-secondary)", marginBottom: "1.5rem" }}>
+            <p
+              style={{
+                fontSize: "0.85rem",
+                color: "var(--text-secondary)",
+                marginBottom: "1.5rem",
+              }}
+            >
               Hover to see more details, then check in when something fits.
             </p>
 
             {/* Urgent request cards */}
             {filteredUrgentRequests.map((request) => {
-              const score = request.org ? computeMatchScore(volunteer, request.org).score : 0;
+              const score = request.org
+                ? computeMatchScore(volunteer, request.org).score
+                : 0;
               const cardId = `urgent-${request.id}`;
               const isHovered = hoveredCard === cardId;
               const spotsLeft = Math.max(
@@ -462,14 +1173,37 @@ export default function VolunteerDashboard() {
                     ...cardHoverStyle(isHovered, "var(--urgency-critical)"),
                   }}
                 >
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start", marginBottom: "0.75rem" }}>
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "start",
+                      marginBottom: "0.75rem",
+                    }}
+                  >
                     <div>
-                      <span className="urgency-badge urgency-critical">Urgent Request</span>
-                      <h3 style={{ fontFamily: "var(--font-display)", fontSize: "1.1rem", fontWeight: 500, marginTop: "0.5rem" }}>
+                      <span className="urgency-badge urgency-critical">
+                        Urgent Request
+                      </span>
+                      <h3
+                        style={{
+                          fontFamily: "var(--font-display)",
+                          fontSize: "1.1rem",
+                          fontWeight: 500,
+                          marginTop: "0.5rem",
+                        }}
+                      >
                         {request.title}
                       </h3>
-                      <p style={{ fontSize: "0.85rem", color: "var(--text-secondary)", marginTop: "0.25rem" }}>
-                        {request.org?.account_name || request.org?.legal_name} · {request.org?.city || "BC"}
+                      <p
+                        style={{
+                          fontSize: "0.85rem",
+                          color: "var(--text-secondary)",
+                          marginTop: "0.25rem",
+                        }}
+                      >
+                        {request.org?.account_name || request.org?.legal_name} ·{" "}
+                        {request.org?.city || "BC"}
                       </p>
                     </div>
                     <ScoreNumber
@@ -480,51 +1214,147 @@ export default function VolunteerDashboard() {
                     />
                   </div>
 
-                  <p style={{ fontSize: "0.85rem", color: "var(--text-secondary)", marginBottom: "1rem" }}>
+                  <p
+                    style={{
+                      fontSize: "0.85rem",
+                      color: "var(--text-secondary)",
+                      marginBottom: "1rem",
+                    }}
+                  >
                     {request.description}
                   </p>
 
-                  <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap", marginBottom: "1rem" }}>
+                  <div
+                    style={{
+                      display: "flex",
+                      gap: "0.4rem",
+                      flexWrap: "wrap",
+                      marginBottom: "1rem",
+                    }}
+                  >
                     {request.skills_required?.map((skill) => (
-                      <span key={skill} className="tag tag-skill">{skill}</span>
+                      <span key={skill} className="tag tag-skill">
+                        {skill}
+                      </span>
                     ))}
                     {request.languages_required?.map((language) => (
-                      <span key={language} className="tag tag-language">{language}</span>
+                      <span key={language} className="tag tag-language">
+                        {language}
+                      </span>
                     ))}
                   </div>
 
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                      <ScoreBar score={score} color={scoreColor(score)} animate={isHovered} />
-                      <span style={{ fontSize: "0.75rem", fontWeight: 600, color: scoreColor(score), transition: "color 200ms ease" }}>
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "0.5rem",
+                      }}
+                    >
+                      <ScoreBar
+                        score={score}
+                        color={scoreColor(score)}
+                        animate={isHovered}
+                      />
+                      <span
+                        style={{
+                          fontSize: "0.75rem",
+                          fontWeight: 600,
+                          color: scoreColor(score),
+                          transition: "color 200ms ease",
+                        }}
+                      >
                         {score}% match
                       </span>
                     </div>
                     <div style={{ display: "flex", gap: "0.5rem" }}>
                       {respondedRequests[request.id] === "accepted" ? (
-                        <div className="btn" style={{ background: "var(--accent-green-light)", color: "var(--accent-green)", cursor: "default", fontSize: "0.8rem" }}>Checked in</div>
+                        <div
+                          className="btn"
+                          style={{
+                            background: "var(--accent-green-light)",
+                            color: "var(--accent-green)",
+                            cursor: "default",
+                            fontSize: "0.8rem",
+                          }}
+                        >
+                          Checked in
+                        </div>
                       ) : respondedRequests[request.id] === "declined" ? (
-                        <div className="btn" style={{ background: "var(--bg-secondary)", color: "var(--text-muted)", cursor: "default", fontSize: "0.8rem" }}>Declined</div>
+                        <div
+                          className="btn"
+                          style={{
+                            background: "var(--bg-secondary)",
+                            color: "var(--text-muted)",
+                            cursor: "default",
+                            fontSize: "0.8rem",
+                          }}
+                        >
+                          Declined
+                        </div>
                       ) : (
                         <>
-                          <button onClick={() => handleDeclineUrgent(request.id)} className="btn btn-outline" style={{ fontSize: "0.8rem", padding: "8px 16px" }}>Decline</button>
-                          <button onClick={() => handleAcceptUrgent(request.id)} className="btn btn-urgent" style={{ fontSize: "0.8rem", padding: "8px 16px" }}>I Can Help</button>
+                          <button
+                            onClick={() => handleDeclineUrgent(request.id)}
+                            className="btn btn-outline"
+                            style={{ fontSize: "0.8rem", padding: "8px 16px" }}
+                          >
+                            Decline
+                          </button>
+                          <button
+                            onClick={() => handleAcceptUrgent(request.id)}
+                            className="btn btn-urgent"
+                            style={{ fontSize: "0.8rem", padding: "8px 16px" }}
+                          >
+                            I Can Help
+                          </button>
                         </>
                       )}
                     </div>
                   </div>
 
                   <ExpandedDetails expanded={isHovered}>
-                    <div style={{ fontSize: "0.8rem", color: "var(--text-secondary)" }}>
-                      <strong style={{ color: "var(--text-primary)" }}>Location:</strong>{" "}
+                    <div
+                      style={{
+                        fontSize: "0.8rem",
+                        color: "var(--text-secondary)",
+                      }}
+                    >
+                      <strong style={{ color: "var(--text-primary)" }}>
+                        Location:
+                      </strong>{" "}
                       {request.is_remote ? "Remote" : request.org?.city || "BC"}
                     </div>
-                    <div style={{ fontSize: "0.8rem", color: "var(--text-secondary)" }}>
-                      <strong style={{ color: "var(--text-primary)" }}>Availability:</strong>{" "}
-                      {describeAvailability(request.org?.availability_preference || volunteer.availability)}
+                    <div
+                      style={{
+                        fontSize: "0.8rem",
+                        color: "var(--text-secondary)",
+                      }}
+                    >
+                      <strong style={{ color: "var(--text-primary)" }}>
+                        Availability:
+                      </strong>{" "}
+                      {describeAvailability(
+                        request.org?.availability_preference ||
+                          volunteer.availability,
+                      )}
                     </div>
-                    <div style={{ fontSize: "0.8rem", color: "var(--text-secondary)" }}>
-                      <strong style={{ color: "var(--text-primary)" }}>When & length:</strong>{" "}
+                    <div
+                      style={{
+                        fontSize: "0.8rem",
+                        color: "var(--text-secondary)",
+                      }}
+                    >
+                      <strong style={{ color: "var(--text-primary)" }}>
+                        When & length:
+                      </strong>{" "}
                       {describeUrgentCommitment(request)}
                     </div>
                   </ExpandedDetails>
@@ -536,7 +1366,9 @@ export default function VolunteerDashboard() {
             {filteredRankedOrgs.map(({ org, score, breakdown }) => {
               const cardId = `org-${org.id}`;
               const isHovered = hoveredCard === cardId;
-              const isPlanned = plannedContributions.some((item) => item.id === cardId);
+              const isPlanned = plannedContributions.some(
+                (item) => item.id === cardId,
+              );
               const accentColor = urgencyColor(org.volunteer_urgency);
 
               return (
@@ -553,123 +1385,335 @@ export default function VolunteerDashboard() {
                     ...cardHoverStyle(isHovered, accentColor),
                   }}
                 >
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start", marginBottom: "0.75rem" }}>
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "start",
+                      marginBottom: "0.75rem",
+                    }}
+                  >
                     <div>
-                      <span className={`urgency-badge ${urgencyClass(org.volunteer_urgency)}`}>
+                      <span
+                        className={`urgency-badge ${urgencyClass(org.volunteer_urgency)}`}
+                      >
                         {org.volunteer_urgency} need
                       </span>
-                      <h3 style={{ fontFamily: "var(--font-display)", fontSize: "1.1rem", fontWeight: 500, marginTop: "0.5rem" }}>
+                      <h3
+                        style={{
+                          fontFamily: "var(--font-display)",
+                          fontSize: "1.1rem",
+                          fontWeight: 500,
+                          marginTop: "0.5rem",
+                        }}
+                      >
                         {org.account_name || org.legal_name}
                       </h3>
-                      <p style={{ fontSize: "0.85rem", color: "var(--text-secondary)", marginTop: "0.25rem" }}>
+                      <p
+                        style={{
+                          fontSize: "0.85rem",
+                          color: "var(--text-secondary)",
+                          marginTop: "0.25rem",
+                        }}
+                      >
                         {org.sector} · {org.city}
                       </p>
                     </div>
-                    <ScoreNumber value={score} color={scoreColor(score)} isHovered={isHovered} unit="match" />
+                    <ScoreNumber
+                      value={score}
+                      color={scoreColor(score)}
+                      isHovered={isHovered}
+                      unit="match"
+                    />
                   </div>
 
                   {/* Score breakdown — fades up to full opacity on hover */}
-                  <div style={{
-                    display: "flex", gap: "1rem", marginBottom: "1rem",
-                    fontSize: "0.72rem", color: "var(--text-muted)", flexWrap: "wrap",
-                    opacity: isHovered ? 1 : 0.38,
-                    transform: isHovered ? "translateY(0)" : "translateY(2px)",
-                    transition: "opacity 250ms ease, transform 250ms ease",
-                  }}>
+                  <div
+                    style={{
+                      display: "flex",
+                      gap: "1rem",
+                      marginBottom: "1rem",
+                      fontSize: "0.72rem",
+                      color: "var(--text-muted)",
+                      flexWrap: "wrap",
+                      opacity: isHovered ? 1 : 0.38,
+                      transform: isHovered
+                        ? "translateY(0)"
+                        : "translateY(2px)",
+                      transition: "opacity 250ms ease, transform 250ms ease",
+                    }}
+                  >
                     <span>Skills {breakdown.skills}/35</span>
                     <span>Language {breakdown.language}/25</span>
                     <span>Availability {breakdown.availability}/20</span>
                     <span>Cause {breakdown.cause_alignment}/10</span>
                   </div>
 
-                  <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap", marginBottom: "1rem" }}>
+                  <div
+                    style={{
+                      display: "flex",
+                      gap: "0.4rem",
+                      flexWrap: "wrap",
+                      marginBottom: "1rem",
+                    }}
+                  >
                     {org.skills_needed?.map((skill) => {
-                      const hasSkill = volunteer.skills.some((v) => v.toLowerCase() === skill.toLowerCase());
+                      const hasSkill = volunteer.skills.some(
+                        (v) => v.toLowerCase() === skill.toLowerCase(),
+                      );
                       return (
-                        <span key={skill} className={`tag ${hasSkill ? "tag-selected" : "tag-skill"}`}>
-                          {hasSkill ? "✓ " : ""}{skill}
+                        <span
+                          key={skill}
+                          className={`tag ${hasSkill ? "tag-selected" : "tag-skill"}`}
+                        >
+                          {hasSkill ? "✓ " : ""}
+                          {skill}
                         </span>
                       );
                     })}
                     {org.languages_needed?.map((language) => {
-                      const hasLanguage = volunteer.languages.some((v) => v.toLowerCase() === language.toLowerCase());
+                      const hasLanguage = volunteer.languages.some(
+                        (v) => v.toLowerCase() === language.toLowerCase(),
+                      );
                       return (
-                        <span key={language} className={`tag ${hasLanguage ? "tag-selected" : ""}`}
-                          style={hasLanguage ? {} : { background: "var(--accent-green-light)", color: "var(--accent-green)", border: "1px solid var(--accent-green-light)" }}>
-                          {hasLanguage ? "✓ " : ""}{language}
+                        <span
+                          key={language}
+                          className={`tag ${hasLanguage ? "tag-selected" : ""}`}
+                          style={
+                            hasLanguage
+                              ? {}
+                              : {
+                                  background: "var(--accent-green-light)",
+                                  color: "var(--accent-green)",
+                                  border: "1px solid var(--accent-green-light)",
+                                }
+                          }
+                        >
+                          {hasLanguage ? "✓ " : ""}
+                          {language}
                         </span>
                       );
                     })}
                   </div>
 
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                      <ScoreBar score={score} color={scoreColor(score)} animate={isHovered} />
-                      <span style={{ fontSize: "0.75rem", fontWeight: 600, color: scoreColor(score) }}>
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "0.5rem",
+                      }}
+                    >
+                      <ScoreBar
+                        score={score}
+                        color={scoreColor(score)}
+                        animate={isHovered}
+                      />
+                      <span
+                        style={{
+                          fontSize: "0.75rem",
+                          fontWeight: 600,
+                          color: scoreColor(score),
+                        }}
+                      >
                         {score}% match
                       </span>
                     </div>
                     {isPlanned ? (
-                      <div className="btn" style={{ background: "var(--accent-green-light)", color: "var(--accent-green)", cursor: "default", fontSize: "0.8rem" }}>Checked in</div>
+                      <div
+                        className="btn"
+                        style={{
+                          background: "var(--accent-green-light)",
+                          color: "var(--accent-green)",
+                          cursor: "default",
+                          fontSize: "0.8rem",
+                        }}
+                      >
+                        Checked in
+                      </div>
                     ) : (
-                      <button onClick={() => handleVolunteerForOrg(org, score)} className="btn btn-primary" style={{ fontSize: "0.8rem", padding: "8px 16px" }}>
+                      <button
+                        onClick={() => handleVolunteerForOrg(org, score)}
+                        className="btn btn-primary"
+                        style={{ fontSize: "0.8rem", padding: "8px 16px" }}
+                      >
                         I Can Help
                       </button>
                     )}
                   </div>
 
                   <ExpandedDetails expanded={isHovered}>
-                    <div style={{ fontSize: "0.8rem", color: "var(--text-secondary)" }}>
-                      <strong style={{ color: "var(--text-primary)" }}>Location:</strong> {org.city}, {org.province}
+                    <div
+                      style={{
+                        fontSize: "0.8rem",
+                        color: "var(--text-secondary)",
+                      }}
+                    >
+                      <strong style={{ color: "var(--text-primary)" }}>
+                        Location:
+                      </strong>{" "}
+                      {org.city}, {org.province}
                     </div>
-                    <div style={{ fontSize: "0.8rem", color: "var(--text-secondary)" }}>
-                      <strong style={{ color: "var(--text-primary)" }}>Availability:</strong> {describeAvailability(org.availability_preference)}
+                    <div
+                      style={{
+                        fontSize: "0.8rem",
+                        color: "var(--text-secondary)",
+                      }}
+                    >
+                      <strong style={{ color: "var(--text-primary)" }}>
+                        Availability:
+                      </strong>{" "}
+                      {describeAvailability(org.availability_preference)}
                     </div>
-                    <div style={{ fontSize: "0.8rem", color: "var(--text-secondary)" }}>
-                      <strong style={{ color: "var(--text-primary)" }}>When & length:</strong> {describeOrgCommitment(org)}
+                    <div
+                      style={{
+                        fontSize: "0.8rem",
+                        color: "var(--text-secondary)",
+                      }}
+                    >
+                      <strong style={{ color: "var(--text-primary)" }}>
+                        When & length:
+                      </strong>{" "}
+                      {describeOrgCommitment(org)}
                     </div>
                   </ExpandedDetails>
                 </div>
               );
             })}
-            {filteredUrgentRequests.length === 0 && filteredRankedOrgs.length === 0 && (
-              <div className="card" style={{ padding: "3rem", textAlign: "center" }}>
-                <p style={{ color: "var(--text-muted)" }}>
-                  No opportunities match your search right now.
-                </p>
-              </div>
-            )}
+            {filteredUrgentRequests.length === 0 &&
+              filteredRankedOrgs.length === 0 && (
+                <div
+                  className="card"
+                  style={{ padding: "3rem", textAlign: "center" }}
+                >
+                  <p style={{ color: "var(--text-muted)" }}>
+                    No opportunities match your search right now.
+                  </p>
+                </div>
+              )}
           </div>
         )}
 
         {/* ══ PLANS ══ */}
         {activeTab === "plans" && (
           <div>
-            <h2 style={{ fontFamily: "var(--font-display)", fontSize: "1.5rem", fontWeight: 500, marginBottom: "0.25rem" }}>My Plans</h2>
-            <p style={{ fontSize: "0.85rem", color: "var(--text-secondary)", marginBottom: "1.5rem" }}>
+            <h2
+              style={{
+                fontFamily: "var(--font-display)",
+                fontSize: "1.5rem",
+                fontWeight: 500,
+                marginBottom: "0.25rem",
+              }}
+            >
+              My Plans
+            </h2>
+            <p
+              style={{
+                fontSize: "0.85rem",
+                color: "var(--text-secondary)",
+                marginBottom: "1.5rem",
+              }}
+            >
               Events and shifts you&apos;ve checked into appear here.
             </p>
             {filteredPlannedContributions.map((item) => (
-              <div key={item.id} className="card" style={{ padding: "1.5rem", marginBottom: "1rem" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start", marginBottom: "0.75rem" }}>
+              <div
+                key={item.id}
+                className="card"
+                style={{ padding: "1.5rem", marginBottom: "1rem" }}
+              >
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "start",
+                    marginBottom: "0.75rem",
+                  }}
+                >
                   <div>
-                    <span className={`urgency-badge ${item.type === "urgent" ? "urgency-critical" : "urgency-low"}`}>
+                    <span
+                      className={`urgency-badge ${item.type === "urgent" ? "urgency-critical" : "urgency-low"}`}
+                    >
                       {item.type === "urgent" ? "Checked in" : "Planned"}
                     </span>
-                    <h3 style={{ fontFamily: "var(--font-display)", fontSize: "1.1rem", fontWeight: 500, marginTop: "0.5rem" }}>{item.title}</h3>
-                    <p style={{ fontSize: "0.85rem", color: "var(--text-secondary)", marginTop: "0.25rem" }}>{item.orgName}</p>
+                    <h3
+                      style={{
+                        fontFamily: "var(--font-display)",
+                        fontSize: "1.1rem",
+                        fontWeight: 500,
+                        marginTop: "0.5rem",
+                      }}
+                    >
+                      {item.title}
+                    </h3>
+                    <p
+                      style={{
+                        fontSize: "0.85rem",
+                        color: "var(--text-secondary)",
+                        marginTop: "0.25rem",
+                      }}
+                    >
+                      {item.orgName}
+                    </p>
                   </div>
                   <div style={{ textAlign: "right" }}>
-                    <div style={{ fontFamily: "var(--font-display)", fontSize: "1.3rem", fontWeight: 500, color: scoreColor(item.match) }}>{item.match}%</div>
-                    <div style={{ fontSize: "0.7rem", color: "var(--text-muted)" }}>match</div>
+                    <div
+                      style={{
+                        fontFamily: "var(--font-display)",
+                        fontSize: "1.3rem",
+                        fontWeight: 500,
+                        color: scoreColor(item.match),
+                      }}
+                    >
+                      {item.match}%
+                    </div>
+                    <div
+                      style={{ fontSize: "0.7rem", color: "var(--text-muted)" }}
+                    >
+                      match
+                    </div>
                   </div>
                 </div>
-                <div style={{ display: "grid", gap: "0.45rem", fontSize: "0.82rem", color: "var(--text-secondary)" }}>
-                  <div><strong style={{ color: "var(--text-primary)" }}>Location:</strong> {item.location}</div>
-                  <div><strong style={{ color: "var(--text-primary)" }}>Availability:</strong> {item.timing}</div>
-                  <div><strong style={{ color: "var(--text-primary)" }}>Details:</strong> {item.details}</div>
+                <div
+                  style={{
+                    display: "grid",
+                    gap: "0.45rem",
+                    fontSize: "0.82rem",
+                    color: "var(--text-secondary)",
+                  }}
+                >
+                  <div>
+                    <strong style={{ color: "var(--text-primary)" }}>
+                      Location:
+                    </strong>{" "}
+                    {item.location}
+                  </div>
+                  <div>
+                    <strong style={{ color: "var(--text-primary)" }}>
+                      Availability:
+                    </strong>{" "}
+                    {item.timing}
+                  </div>
+                  <div>
+                    <strong style={{ color: "var(--text-primary)" }}>
+                      Details:
+                    </strong>{" "}
+                    {item.details}
+                  </div>
                 </div>
-                <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "1rem" }}>
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "flex-end",
+                    marginTop: "1rem",
+                  }}
+                >
                   <button
                     type="button"
                     onClick={() => removePlannedContribution(item.id)}
@@ -677,11 +1721,22 @@ export default function VolunteerDashboard() {
                     onMouseLeave={() => setHoveredCancelPlan(null)}
                     className="btn"
                     style={{
-                      fontSize: "0.8rem", padding: "8px 16px",
-                      background: hoveredCancelPlan === item.id ? "var(--urgency-critical)" : "rgba(214, 40, 40, 0.08)",
-                      color: hoveredCancelPlan === item.id ? "white" : "var(--urgency-critical)",
-                      border: hoveredCancelPlan === item.id ? "1.5px solid var(--urgency-critical)" : "1.5px solid rgba(214, 40, 40, 0.22)",
-                      transition: "background 180ms ease, color 180ms ease, border-color 180ms ease",
+                      fontSize: "0.8rem",
+                      padding: "8px 16px",
+                      background:
+                        hoveredCancelPlan === item.id
+                          ? "var(--urgency-critical)"
+                          : "rgba(214, 40, 40, 0.08)",
+                      color:
+                        hoveredCancelPlan === item.id
+                          ? "white"
+                          : "var(--urgency-critical)",
+                      border:
+                        hoveredCancelPlan === item.id
+                          ? "1.5px solid var(--urgency-critical)"
+                          : "1.5px solid rgba(214, 40, 40, 0.22)",
+                      transition:
+                        "background 180ms ease, color 180ms ease, border-color 180ms ease",
                     }}
                   >
                     Cancel plan
@@ -690,10 +1745,13 @@ export default function VolunteerDashboard() {
               </div>
             ))}
             {filteredPlannedContributions.length === 0 && (
-              <div className="card" style={{ padding: "3rem", textAlign: "center" }}>
+              <div
+                className="card"
+                style={{ padding: "3rem", textAlign: "center" }}
+              >
                 <p style={{ color: "var(--text-muted)" }}>
                   {plannedContributions.length === 0
-                    ? "You haven&apos;t checked into anything yet. Browse opportunities to get started."
+                    ? "You haven't checked into anything yet. Browse opportunities to get started."
                     : "No plans match your search."}
                 </p>
               </div>
@@ -704,25 +1762,80 @@ export default function VolunteerDashboard() {
         {/* ══ IMPACT ══ */}
         {activeTab === "impact" && (
           <div>
-            <h2 style={{ fontFamily: "var(--font-display)", fontSize: "1.5rem", fontWeight: 500, marginBottom: "0.35rem" }}>Your Impact</h2>
-            <p style={{ fontSize: "0.85rem", color: "var(--text-secondary)", marginBottom: "1.5rem" }}>
+            <h2
+              style={{
+                fontFamily: "var(--font-display)",
+                fontSize: "1.5rem",
+                fontWeight: 500,
+                marginBottom: "0.35rem",
+              }}
+            >
+              Your Impact
+            </h2>
+            <p
+              style={{
+                fontSize: "0.85rem",
+                color: "var(--text-secondary)",
+                marginBottom: "1.5rem",
+              }}
+            >
               A simple view of how your hours were shared across organizations.
             </p>
 
-            <div className="card" style={{ padding: "1.75rem", marginBottom: "2rem", overflow: "hidden" }}>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "1.25rem", gap: "1rem", flexWrap: "wrap" }}>
+            <div
+              className="card"
+              style={{
+                padding: "1.75rem",
+                marginBottom: "2rem",
+                overflow: "hidden",
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  marginBottom: "1.25rem",
+                  gap: "1rem",
+                  flexWrap: "wrap",
+                }}
+              >
                 <div>
-                  <div style={{ fontSize: "0.75rem", fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--accent-green)", marginBottom: "0.35rem" }}>
+                  <div
+                    style={{
+                      fontSize: "0.75rem",
+                      fontWeight: 700,
+                      letterSpacing: "0.08em",
+                      textTransform: "uppercase",
+                      color: "var(--accent-green)",
+                      marginBottom: "0.35rem",
+                    }}
+                  >
                     April Breakdown
                   </div>
-                  <div style={{ fontFamily: "var(--font-display)", fontSize: "1.2rem", fontWeight: 500 }}>
+                  <div
+                    style={{
+                      fontFamily: "var(--font-display)",
+                      fontSize: "1.2rem",
+                      fontWeight: 500,
+                    }}
+                  >
                     Hours by organization
                   </div>
                 </div>
-                <div className="tag tag-skill">{totalImpactHours} total hours</div>
+                <div className="tag tag-skill">
+                  {totalImpactHours} total hours
+                </div>
               </div>
 
-              <div style={{ display: "grid", gridTemplateColumns: "280px 1fr", gap: "2rem", alignItems: "center" }}>
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "280px 1fr",
+                  gap: "2rem",
+                  alignItems: "center",
+                }}
+              >
                 <div style={{ display: "flex", justifyContent: "center" }}>
                   <div
                     style={{
@@ -738,7 +1851,10 @@ export default function VolunteerDashboard() {
                       width={impactChartSize}
                       height={impactChartSize}
                       viewBox={`0 0 ${impactChartSize} ${impactChartSize}`}
-                      style={{ overflow: "visible", transform: "rotate(-90deg)" }}
+                      style={{
+                        overflow: "visible",
+                        transform: "rotate(-90deg)",
+                      }}
                       aria-hidden="true"
                     >
                       <circle
@@ -784,18 +1900,41 @@ export default function VolunteerDashboard() {
                         justifyContent: "center",
                         textAlign: "center",
                         boxShadow: "0 0 0 1px var(--border-light)",
-                        transform: impactChartReady ? "scale(1)" : "translateY(6px) scale(0.96)",
+                        transform: impactChartReady
+                          ? "scale(1)"
+                          : "translateY(6px) scale(0.96)",
                         opacity: impactChartReady ? 1 : 0.85,
-                        transition: "transform 700ms cubic-bezier(0.22, 1, 0.36, 1) 140ms, opacity 500ms ease 140ms",
+                        transition:
+                          "transform 700ms cubic-bezier(0.22, 1, 0.36, 1) 140ms, opacity 500ms ease 140ms",
                       }}
                     >
-                      <div style={{ fontSize: "0.72rem", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "0.2rem" }}>
+                      <div
+                        style={{
+                          fontSize: "0.72rem",
+                          color: "var(--text-muted)",
+                          textTransform: "uppercase",
+                          letterSpacing: "0.08em",
+                          marginBottom: "0.2rem",
+                        }}
+                      >
                         Total
                       </div>
-                      <div style={{ fontFamily: "var(--font-display)", fontSize: "2rem", fontWeight: 500, color: "var(--accent-green)" }}>
+                      <div
+                        style={{
+                          fontFamily: "var(--font-display)",
+                          fontSize: "2rem",
+                          fontWeight: 500,
+                          color: "var(--accent-green)",
+                        }}
+                      >
                         {totalImpactHours}h
                       </div>
-                      <div style={{ fontSize: "0.8rem", color: "var(--text-secondary)" }}>
+                      <div
+                        style={{
+                          fontSize: "0.8rem",
+                          color: "var(--text-secondary)",
+                        }}
+                      >
                         this month
                       </div>
                     </div>
@@ -827,14 +1966,33 @@ export default function VolunteerDashboard() {
                         }}
                       />
                       <div>
-                        <div style={{ fontWeight: 600, color: "var(--text-primary)", marginBottom: "0.15rem" }}>
+                        <div
+                          style={{
+                            fontWeight: 600,
+                            color: "var(--text-primary)",
+                            marginBottom: "0.15rem",
+                          }}
+                        >
                           {slice.company}
                         </div>
-                        <div style={{ fontSize: "0.82rem", color: "var(--text-secondary)" }}>
-                          {slice.hours} hour{slice.hours === 1 ? "" : "s"} contributed this month
+                        <div
+                          style={{
+                            fontSize: "0.82rem",
+                            color: "var(--text-secondary)",
+                          }}
+                        >
+                          {slice.hours} hour{slice.hours === 1 ? "" : "s"}{" "}
+                          contributed this month
                         </div>
                       </div>
-                      <div style={{ fontFamily: "var(--font-display)", fontSize: "1.15rem", fontWeight: 500, color: slice.color }}>
+                      <div
+                        style={{
+                          fontFamily: "var(--font-display)",
+                          fontSize: "1.15rem",
+                          fontWeight: 500,
+                          color: slice.color,
+                        }}
+                      >
                         {slice.percent}%
                       </div>
                     </div>
@@ -848,25 +2006,88 @@ export default function VolunteerDashboard() {
         {/* ══ HANDOFFS ══ */}
         {activeTab === "handoffs" && (
           <div>
-            <h2 style={{ fontFamily: "var(--font-display)", fontSize: "1.5rem", fontWeight: 500, marginBottom: "0.5rem" }}>Role Handoffs</h2>
-            <p style={{ fontSize: "0.85rem", color: "var(--text-secondary)", marginBottom: "1.5rem" }}>
-              When you take on a role, any knowledge left by previous volunteers appears here.
+            <h2
+              style={{
+                fontFamily: "var(--font-display)",
+                fontSize: "1.5rem",
+                fontWeight: 500,
+                marginBottom: "0.5rem",
+              }}
+            >
+              Role Handoffs
+            </h2>
+            <p
+              style={{
+                fontSize: "0.85rem",
+                color: "var(--text-secondary)",
+                marginBottom: "1.5rem",
+              }}
+            >
+              When you take on a role, any knowledge left by previous volunteers
+              appears here.
             </p>
-            <div className="card" style={{ padding: "1.5rem", marginBottom: "1rem" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.75rem" }}>
-                <h3 style={{ fontFamily: "var(--font-display)", fontWeight: 500 }}>Meal Delivery — East Van Route</h3>
+            <div
+              className="card"
+              style={{ padding: "1.5rem", marginBottom: "1rem" }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  marginBottom: "0.75rem",
+                }}
+              >
+                <h3
+                  style={{ fontFamily: "var(--font-display)", fontWeight: 500 }}
+                >
+                  Meal Delivery — East Van Route
+                </h3>
                 <span className="tag tag-skill">Inherited</span>
               </div>
-              <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem", fontSize: "0.85rem", color: "var(--text-secondary)" }}>
-                <div><strong style={{ color: "var(--text-primary)" }}>Key contacts:</strong> Maria (kitchen coordinator, ext 204), Joe (warehouse, arrives 7am)</div>
-                <div><strong style={{ color: "var(--text-primary)" }}>Recurring tasks:</strong> Pick up from 4885 Valley Dr by 9am, follow route sheet in shared drive, return bins by 1pm</div>
-                <div><strong style={{ color: "var(--text-primary)" }}>Tips:</strong> Building at 41st needs buzzer code 7742. Mrs. Chen on 3rd floor needs meals left at door. Always bring extra bags.</div>
+              <div
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "0.5rem",
+                  fontSize: "0.85rem",
+                  color: "var(--text-secondary)",
+                }}
+              >
+                <div>
+                  <strong style={{ color: "var(--text-primary)" }}>
+                    Key contacts:
+                  </strong>{" "}
+                  Maria (kitchen coordinator, ext 204), Joe (warehouse, arrives
+                  7am)
+                </div>
+                <div>
+                  <strong style={{ color: "var(--text-primary)" }}>
+                    Recurring tasks:
+                  </strong>{" "}
+                  Pick up from 4885 Valley Dr by 9am, follow route sheet in
+                  shared drive, return bins by 1pm
+                </div>
+                <div>
+                  <strong style={{ color: "var(--text-primary)" }}>
+                    Tips:
+                  </strong>{" "}
+                  Building at 41st needs buzzer code 7742. Mrs. Chen on 3rd
+                  floor needs meals left at door. Always bring extra bags.
+                </div>
               </div>
-              <div style={{ marginTop: "0.75rem", fontSize: "0.72rem", color: "var(--text-muted)" }}>Left by: Previous volunteer · 3 weeks ago</div>
+              <div
+                style={{
+                  marginTop: "0.75rem",
+                  fontSize: "0.72rem",
+                  color: "var(--text-muted)",
+                }}
+              >
+                Left by: Previous volunteer · 3 weeks ago
+              </div>
             </div>
           </div>
         )}
-
       </div>
     </div>
   );
