@@ -29,6 +29,8 @@ type PlannedContribution = {
   type: "urgent" | "opportunity";
 };
 
+type DisplayUrgentRequest = UrgentRequest & { org?: Org; is_urgent?: boolean };
+
 // ── Card hover style helper ───────────────────────────────────────
 // Lifts the card, deepens the shadow, and "glows" the left border via box-shadow.
 function cardHoverStyle(
@@ -170,6 +172,18 @@ function ExpandedDetails({
 
 export default function VolunteerDashboard() {
   const router = useRouter();
+  const buildOnboardingForm = (profile: Volunteer) => ({
+    name: profile.name || "",
+    age: profile.age ? String(profile.age) : "",
+    neighbourhood: profile.neighbourhood || "",
+    languages: profile.languages || [],
+    skills: profile.skills || [],
+    interests: profile.interests || [],
+    availability: profile.availability || "",
+    hours_per_month: profile.hours_per_month || 8,
+    has_vehicle: profile.has_vehicle || false,
+    has_background_check: profile.has_background_check || false,
+  });
   const [volunteer, setVolunteer] = useState<Volunteer | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [showOnboarding, setShowOnboarding] = useState(false);
@@ -188,9 +202,9 @@ export default function VolunteerDashboard() {
   const [activeTab, setActiveTab] = useState<Tab>("browse");
   const [searchQuery, setSearchQuery] = useState("");
   const [orgs, setOrgs] = useState<Org[]>([]);
-  const [urgentRequests, setUrgentRequests] = useState<
-    (UrgentRequest & { org?: Org })[]
-  >([]);
+  const [urgentRequests, setUrgentRequests] = useState<DisplayUrgentRequest[]>(
+    [],
+  );
   const [rankedOrgs, setRankedOrgs] = useState<RankedOrg[]>([]);
   const [loading, setLoading] = useState(true);
   const [respondedRequests, setRespondedRequests] = useState<
@@ -258,7 +272,9 @@ export default function VolunteerDashboard() {
         .eq("user_id", session.user.id)
         .maybeSingle();
       if (vol) {
-        setVolunteer(vol as Volunteer);
+        const volunteerProfile = vol as Volunteer;
+        setVolunteer(volunteerProfile);
+        setOnboardingForm(buildOnboardingForm(volunteerProfile));
       } else {
         setShowOnboarding(true);
       }
@@ -272,28 +288,46 @@ export default function VolunteerDashboard() {
       data: { session },
     } = await supabase.auth.getSession();
     if (!session) return;
-    const { data, error } = await supabase
-      .from("volunteers")
-      .insert({
-        user_id: session.user.id,
-        name: onboardingForm.name,
-        age: parseInt(onboardingForm.age) || null,
-        neighbourhood: onboardingForm.neighbourhood,
-        languages: onboardingForm.languages,
-        skills: onboardingForm.skills,
-        interests: onboardingForm.interests,
-        availability: onboardingForm.availability,
-        hours_per_month: onboardingForm.hours_per_month,
-        has_vehicle: onboardingForm.has_vehicle,
-        has_background_check: onboardingForm.has_background_check,
-        prior_experience: "None",
-      })
+    const volunteerPayload = {
+      user_id: session.user.id,
+      name: onboardingForm.name,
+      age: parseInt(onboardingForm.age) || null,
+      neighbourhood: onboardingForm.neighbourhood,
+      languages: onboardingForm.languages,
+      skills: onboardingForm.skills,
+      interests: onboardingForm.interests,
+      availability: onboardingForm.availability,
+      hours_per_month: onboardingForm.hours_per_month,
+      has_vehicle: onboardingForm.has_vehicle,
+      has_background_check: onboardingForm.has_background_check,
+      prior_experience: volunteer?.prior_experience || "None",
+    };
+
+    const query = volunteer
+      ? supabase
+          .from("volunteers")
+          .update(volunteerPayload)
+          .eq("id", volunteer.id)
+      : supabase.from("volunteers").insert({
+          ...volunteerPayload,
+        });
+
+    const { data, error } = await query
       .select()
       .single();
     if (!error && data) {
-      setVolunteer(data as Volunteer);
+      const updatedVolunteer = data as Volunteer;
+      setVolunteer(updatedVolunteer);
+      setOnboardingForm(buildOnboardingForm(updatedVolunteer));
       setShowOnboarding(false);
     }
+  };
+
+  const openPreferencesEditor = () => {
+    if (volunteer) {
+      setOnboardingForm(buildOnboardingForm(volunteer));
+    }
+    setShowOnboarding(true);
   };
 
   const urgencyColor = (urgency: string) =>
@@ -502,12 +536,8 @@ export default function VolunteerDashboard() {
       (value || "").toLowerCase().includes(normalizedSearch),
     );
 
-  const actualUrgent = urgentRequests.filter(
-    (r) => (r as any).is_urgent !== false,
-  );
-  const generalOpportunities = urgentRequests.filter(
-    (r) => (r as any).is_urgent === false,
-  );
+  const actualUrgent = urgentRequests.filter((r) => r.is_urgent !== false);
+  const generalOpportunities = urgentRequests.filter((r) => r.is_urgent === false);
 
   const filteredUrgentRequests = actualUrgent.filter((request) =>
     matchesSearch(
@@ -598,6 +628,28 @@ export default function VolunteerDashboard() {
   }
 
   if (showOnboarding || !volunteer) {
+    const NEIGHBOURHOOD_OPTIONS = [
+      "Downtown",
+      "Dunbar-Southlands",
+      "Fairview",
+      "Grandview-Woodland",
+      "Hastings-Sunrise",
+      "Kensington-Cedar Cottage",
+      "Kerrisdale",
+      "Kitsilano",
+      "Marpole",
+      "Mount Pleasant",
+      "Oakridge",
+      "Point Grey",
+      "Renfrew-Collingwood",
+      "Riley Park",
+      "Shaughnessy",
+      "South Cambie",
+      "Strathcona",
+      "Sunset",
+      "Victoria-Fraserview",
+      "West End",
+    ];
     const SKILL_OPTIONS = [
       "Driving/transportation",
       "Tutoring/mentorship",
@@ -703,7 +755,9 @@ export default function VolunteerDashboard() {
               -volunteer
             </div>
             <p style={{ fontSize: "0.9rem", color: "var(--text-secondary)" }}>
-              Tell us about yourself so we can find the right opportunities.
+              {volunteer
+                ? "Update your interests and availability so we can refresh your matches."
+                : "Tell us about yourself so we can find the right opportunities."}
             </p>
           </div>
           <div className="card" style={{ padding: "2rem" }}>
@@ -777,8 +831,7 @@ export default function VolunteerDashboard() {
               >
                 Neighbourhood
               </label>
-              <input
-                type="text"
+              <select
                 value={onboardingForm.neighbourhood}
                 onChange={(e) =>
                   setOnboardingForm({
@@ -786,9 +839,15 @@ export default function VolunteerDashboard() {
                     neighbourhood: e.target.value,
                   })
                 }
-                style={inputStyle}
-                placeholder="e.g. Kitsilano"
-              />
+                style={{ ...inputStyle, appearance: "none" as const }}
+              >
+                <option value="">Select your neighbourhood</option>
+                {NEIGHBOURHOOD_OPTIONS.map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
+                ))}
+              </select>
             </div>
             <div style={{ marginBottom: "1.25rem" }}>
               <label
@@ -914,7 +973,7 @@ export default function VolunteerDashboard() {
             <div
               style={{
                 display: "grid",
-                gridTemplateColumns: "1fr 1fr 1fr",
+                gridTemplateColumns: "1fr 1fr",
                 gap: "1rem",
                 marginBottom: "1.5rem",
               }}
@@ -947,64 +1006,93 @@ export default function VolunteerDashboard() {
               <div
                 style={{
                   display: "flex",
-                  alignItems: "end",
-                  gap: "0.5rem",
-                  paddingBottom: "0.25rem",
+                  flexDirection: "column",
+                  gap: "0.4rem",
                 }}
               >
-                <input
-                  type="checkbox"
-                  checked={onboardingForm.has_vehicle}
-                  onChange={(e) =>
-                    setOnboardingForm({
-                      ...onboardingForm,
-                      has_vehicle: e.target.checked,
-                    })
-                  }
-                />
                 <label
-                  style={{ fontSize: "0.8rem", color: "var(--text-secondary)" }}
+                  style={{
+                    display: "block",
+                    fontSize: "0.8rem",
+                    fontWeight: 600,
+                    marginBottom: "0.4rem",
+                    color: "var(--text-secondary)",
+                  }}
                 >
-                  Vehicle
+                  Vehicle access?
                 </label>
-              </div>
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "end",
-                  gap: "0.5rem",
-                  paddingBottom: "0.25rem",
-                }}
-              >
-                <input
-                  type="checkbox"
-                  checked={onboardingForm.has_background_check}
-                  onChange={(e) =>
-                    setOnboardingForm({
-                      ...onboardingForm,
-                      has_background_check: e.target.checked,
-                    })
-                  }
-                />
-                <label
-                  style={{ fontSize: "0.8rem", color: "var(--text-secondary)" }}
-                >
-                  Background check
-                </label>
+                <div style={{ display: "flex", gap: "8px" }}>
+                  {[
+                    { label: "Yes", value: true },
+                    { label: "No", value: false },
+                  ].map((option) => (
+                    <button
+                      key={option.label}
+                      type="button"
+                      onClick={() =>
+                        setOnboardingForm({
+                          ...onboardingForm,
+                          has_vehicle: option.value,
+                        })
+                      }
+                      style={{
+                        flex: 1,
+                        padding: "10px 14px",
+                        borderRadius: "10px",
+                        border: "1.5px solid",
+                        borderColor:
+                          onboardingForm.has_vehicle === option.value
+                            ? "var(--accent-green)"
+                            : "var(--border-light)",
+                        background:
+                          onboardingForm.has_vehicle === option.value
+                            ? "var(--accent-green-light)"
+                            : "var(--bg-primary)",
+                        color:
+                          onboardingForm.has_vehicle === option.value
+                            ? "var(--accent-green)"
+                            : "var(--text-secondary)",
+                        fontSize: "0.82rem",
+                        fontWeight:
+                          onboardingForm.has_vehicle === option.value ? 600 : 400,
+                        cursor: "pointer",
+                        textAlign: "left",
+                        transition: "all 0.18s ease",
+                      }}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
-            <button
-              onClick={handleOnboardingSubmit}
-              className="btn btn-primary"
-              style={{ width: "100%" }}
-              disabled={
-                !onboardingForm.name ||
-                onboardingForm.languages.length === 0 ||
-                onboardingForm.interests.length === 0
-              }
-            >
-              Find my matches
-            </button>
+            <div style={{ display: "flex", gap: "0.75rem" }}>
+              {volunteer && (
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  style={{ flex: 1 }}
+                  onClick={() => {
+                    setOnboardingForm(buildOnboardingForm(volunteer));
+                    setShowOnboarding(false);
+                  }}
+                >
+                  Cancel
+                </button>
+              )}
+              <button
+                onClick={handleOnboardingSubmit}
+                className="btn btn-primary"
+                style={{ width: "100%", flex: 1 }}
+                disabled={
+                  !onboardingForm.name ||
+                  onboardingForm.languages.length === 0 ||
+                  onboardingForm.interests.length === 0
+                }
+              >
+                {volunteer ? "Save updates" : "Find my matches"}
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -1048,6 +1136,14 @@ export default function VolunteerDashboard() {
           </em>
         </Link>
         <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
+          <button
+            type="button"
+            className="btn btn-ghost"
+            style={{ fontSize: "0.8rem", padding: "8px 14px" }}
+            onClick={openPreferencesEditor}
+          >
+            Update Preferences
+          </button>
           <span style={{ fontSize: "0.85rem", color: "var(--text-secondary)" }}>
             {volunteer.name}
           </span>
