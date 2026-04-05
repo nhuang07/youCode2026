@@ -397,6 +397,10 @@ export default function VolunteerDashboard() {
     } catch {
       /* demo fallback */
     }
+    await supabase
+      .from("urgent_requests")
+      .update({ people_confirmed: (request?.people_confirmed || 0) + 1 })
+      .eq("id", requestId);
 
     if (request) {
       setUrgentRequests((prev) =>
