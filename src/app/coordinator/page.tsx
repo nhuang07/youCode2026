@@ -4,11 +4,12 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 import { Org, UrgentRequest } from "@/lib/types";
-import { DemoVolunteerSummary } from "@/lib/demo-data";
-import { extractFeatures, predictChurn } from "@/lib/churn";
-import { EngagementLog } from "@/lib/types";
+import {
+  DEMO_VOLUNTEER_SUMMARIES,
+  DemoVolunteerSummary,
+} from "@/lib/demo-data";
 
-type Tab = "overview" | "requests" | "volunteers" | "handoffs";
+type Tab = "overview" | "requests" | "volunteers";
 
 export default function CoordinatorDashboard() {
   const [activeTab, setActiveTab] = useState<Tab>("overview");
@@ -36,8 +37,7 @@ export default function CoordinatorDashboard() {
   });
   const [orgsLoading, setOrgsLoading] = useState(true);
 
-  const [volunteers, setVolunteers] = useState<DemoVolunteerSummary[]>([]);
-  const [volunteersLoading, setVolunteersLoading] = useState(true);
+  const volunteers = DEMO_VOLUNTEER_SUMMARIES;
   const activeVols = volunteers.filter((v) => v.status === "active");
   const coolingVols = volunteers.filter((v) => v.status === "cooling");
   const atRiskVols = volunteers.filter((v) => v.status === "at-risk");
@@ -77,10 +77,11 @@ export default function CoordinatorDashboard() {
         },
         (payload) => {
           if (payload.eventType === "INSERT")
-            setPostedRequests((prev) => [
-              payload.new as UrgentRequest,
-              ...prev,
-            ]);
+            setPostedRequests((prev) => {
+              const newReq = payload.new as UrgentRequest;
+              if (prev.some((r) => r.id === newReq.id)) return prev;
+              return [newReq, ...prev];
+            });
           else if (payload.eventType === "UPDATE")
             setPostedRequests((prev) =>
               prev.map((r) =>
@@ -95,79 +96,6 @@ export default function CoordinatorDashboard() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [org]);
-
-  // Fetch engagement logs and compute churn predictions
-  useEffect(() => {
-    if (!org) return;
-    async function computeChurn() {
-      setVolunteersLoading(true);
-
-      // Get all engagement logs
-      const { data: logs } = await supabase.from("engagement_logs").select("*");
-      // Get all volunteers who have logs
-      const { data: volData } = await supabase
-        .from("volunteers")
-        .select("id, name");
-
-      if (!logs || !volData) {
-        setVolunteersLoading(false);
-        return;
-      }
-
-      const typedLogs = logs as EngagementLog[];
-
-      // Group logs by volunteer
-      const logsByVol: Record<string, EngagementLog[]> = {};
-      typedLogs.forEach((log) => {
-        if (!logsByVol[log.volunteer_id]) logsByVol[log.volunteer_id] = [];
-        logsByVol[log.volunteer_id].push(log);
-      });
-
-      // Run churn prediction on each volunteer with logs
-      const results: DemoVolunteerSummary[] = [];
-      for (const vol of volData) {
-        const volLogs = logsByVol[vol.id];
-        if (!volLogs || volLogs.length === 0) continue;
-
-        const features = extractFeatures(volLogs);
-        const prediction = predictChurn(features);
-
-        const sorted = [...volLogs].sort(
-          (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime(),
-        );
-        const totalHrs = volLogs.reduce((s, l) => s + Number(l.hours), 0);
-        const crisisCount = volLogs.filter(
-          (l) => l.type === "crisis-response",
-        ).length;
-
-        results.push({
-          name: vol.name,
-          status:
-            prediction.risk === "high"
-              ? "at-risk"
-              : prediction.risk === "medium"
-                ? "cooling"
-                : "active",
-          last_active_days_ago: features.days_since_last_active,
-          total_hours: totalHrs,
-          total_shifts: volLogs.length,
-          crisis_responses: crisisCount,
-          streak: features.total_shifts_last_30_days,
-          trend:
-            features.hours_trend === "declining"
-              ? "Hours declining from previous month"
-              : features.hours_trend === "increasing"
-                ? "Hours increasing month over month"
-                : "Steady engagement",
-          suggested_action: prediction.suggested_action,
-        });
-      }
-
-      setVolunteers(results);
-      setVolunteersLoading(false);
-    }
-    computeChurn();
   }, [org]);
 
   const filteredOrgs =
@@ -206,6 +134,7 @@ export default function CoordinatorDashboard() {
       })
       .select();
     if (!error && data) {
+      setPostedRequests((prev) => [data[0] as UrgentRequest, ...prev]);
       setShowUrgentForm(false);
       setUrgentForm({
         title: "",
@@ -498,7 +427,6 @@ export default function CoordinatorDashboard() {
           { id: "overview" as Tab, label: "Dashboard" },
           { id: "requests" as Tab, label: "Requests" },
           { id: "volunteers" as Tab, label: "Volunteers" },
-          { id: "handoffs" as Tab, label: "Knowledge Base" },
         ].map((tab) => (
           <button
             key={tab.id}
@@ -534,35 +462,31 @@ export default function CoordinatorDashboard() {
         {/* ── DASHBOARD ── */}
         {activeTab === "overview" && (
           <div>
-            {/* Welcome + action buttons */}
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "start",
-                marginBottom: "2rem",
-              }}
-            >
-              <div>
-                <h2
-                  style={{
-                    fontFamily: "var(--font-display)",
-                    fontSize: "1.5rem",
-                    fontWeight: 500,
-                    marginBottom: "0.25rem",
-                  }}
-                >
-                  Welcome back
-                </h2>
-                <p
-                  style={{
-                    fontSize: "0.85rem",
-                    color: "var(--text-secondary)",
-                  }}
-                >
-                  {org.account_name || org.legal_name} · {org.sector}
-                </p>
-              </div>
+            {/* Welcome header — left aligned, no card */}
+            <div style={{ marginBottom: "2.5rem" }}>
+              <p
+                style={{
+                  fontSize: "0.72rem",
+                  fontWeight: 600,
+                  letterSpacing: "0.1em",
+                  textTransform: "uppercase",
+                  color: "var(--text-muted)",
+                  marginBottom: "0.5rem",
+                }}
+              >
+                {org.sector} · {org.org_size}
+              </p>
+              <h2
+                style={{
+                  fontFamily: "var(--font-display)",
+                  fontSize: "clamp(1.5rem, 3vw, 2rem)",
+                  fontWeight: 500,
+                  lineHeight: 1.2,
+                  marginBottom: "0.75rem",
+                }}
+              >
+                {org.account_name || org.legal_name}
+              </h2>
               <div style={{ display: "flex", gap: "0.5rem" }}>
                 <button
                   onClick={() => {
@@ -587,403 +511,522 @@ export default function CoordinatorDashboard() {
               </div>
             </div>
 
-            {/* At-a-glance stats — human-readable sentences */}
+            {/* Two-column asymmetric layout */}
             <div
-              className="card"
-              style={{ padding: "1.5rem", marginBottom: "1.5rem" }}
+              style={{
+                display: "grid",
+                gridTemplateColumns: "2fr 1fr",
+                gap: "1.5rem",
+                alignItems: "start",
+              }}
             >
-              <h3
-                style={{
-                  fontFamily: "var(--font-display)",
-                  fontWeight: 500,
-                  fontSize: "1.05rem",
-                  marginBottom: "1rem",
-                }}
-              >
-                Your team right now
-              </h3>
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "1fr 1fr",
-                  gap: "1rem",
-                }}
-              >
+              {/* Left column — main content */}
+              <div>
+                {/* Big stat banner */}
                 <div
                   style={{
-                    padding: "1rem",
-                    borderRadius: "var(--radius-md)",
-                    background: "var(--accent-matcha-pale)",
+                    display: "flex",
+                    gap: "1rem",
+                    marginBottom: "1.5rem",
                   }}
                 >
                   <div
                     style={{
-                      display: "flex",
-                      alignItems: "baseline",
-                      gap: "0.5rem",
+                      flex: 1,
+                      padding: "1.5rem",
+                      borderRadius: "var(--radius-lg)",
+                      background: "var(--accent-matcha-pale)",
                     }}
                   >
-                    <span
+                    <div
                       style={{
                         fontFamily: "var(--font-display)",
-                        fontSize: "2rem",
+                        fontSize: "2.5rem",
                         fontWeight: 500,
                         color: "var(--accent-green)",
+                        lineHeight: 1,
                       }}
                     >
                       {activeVols.length}
-                    </span>
-                    <span
+                    </div>
+                    <div
                       style={{
                         fontSize: "0.85rem",
                         color: "var(--accent-green-dark)",
+                        marginTop: "0.5rem",
                       }}
                     >
                       active volunteers
-                    </span>
+                    </div>
+                    <div
+                      style={{
+                        fontSize: "0.72rem",
+                        color: "var(--text-muted)",
+                        marginTop: "0.25rem",
+                      }}
+                    >
+                      {totalHours} hours contributed
+                    </div>
                   </div>
                   <div
                     style={{
-                      fontSize: "0.75rem",
-                      color: "var(--text-muted)",
-                      marginTop: "0.25rem",
+                      flex: 1,
+                      padding: "1.5rem",
+                      borderRadius: "var(--radius-lg)",
+                      background:
+                        org.volunteers_currently_needed > 10
+                          ? "rgba(192,58,58,0.06)"
+                          : "var(--bg-secondary)",
                     }}
                   >
-                    {totalHours} total hours contributed
-                  </div>
-                </div>
-                <div
-                  style={{
-                    padding: "1rem",
-                    borderRadius: "var(--radius-md)",
-                    background:
-                      org.volunteers_currently_needed > 10
-                        ? "rgba(192,58,58,0.08)"
-                        : "var(--bg-secondary)",
-                  }}
-                >
-                  <div
-                    style={{
-                      display: "flex",
-                      alignItems: "baseline",
-                      gap: "0.5rem",
-                    }}
-                  >
-                    <span
+                    <div
                       style={{
                         fontFamily: "var(--font-display)",
-                        fontSize: "2rem",
+                        fontSize: "2.5rem",
                         fontWeight: 500,
                         color:
                           org.volunteers_currently_needed > 10
                             ? "var(--urgency-critical)"
                             : "var(--text-primary)",
+                        lineHeight: 1,
                       }}
                     >
                       {org.volunteers_currently_needed}
-                    </span>
-                    <span
-                      style={{
-                        fontSize: "0.85rem",
-                        color: "var(--text-secondary)",
-                      }}
-                    >
-                      more volunteers needed
-                    </span>
-                  </div>
-                  <div
-                    style={{
-                      fontSize: "0.75rem",
-                      color: "var(--text-muted)",
-                      marginTop: "0.25rem",
-                    }}
-                  >
-                    {org.volunteer_urgency === "Critical"
-                      ? "Critical — consider posting an urgent request"
-                      : org.volunteer_urgency === "High"
-                        ? "High need — your team is stretched thin"
-                        : "Manageable for now"}
-                  </div>
-                </div>
-              </div>
-
-              {/* Risk summary — only show if there are at-risk or cooling */}
-              {(atRiskVols.length > 0 || coolingVols.length > 0) && (
-                <div
-                  style={{
-                    marginTop: "1rem",
-                    padding: "0.75rem 1rem",
-                    borderRadius: "var(--radius-md)",
-                    background: "rgba(201,103,62,0.08)",
-                    fontSize: "0.85rem",
-                    color: "var(--urgency-high)",
-                  }}
-                >
-                  ⚠{" "}
-                  {atRiskVols.length > 0 && (
-                    <strong>
-                      {atRiskVols.length} volunteer
-                      {atRiskVols.length > 1 ? "s" : ""} at risk of
-                      leaving.{" "}
-                    </strong>
-                  )}
-                  {coolingVols.length > 0 && (
-                    <span>{coolingVols.length} cooling off. </span>
-                  )}
-                  <button
-                    onClick={() => setActiveTab("volunteers")}
-                    style={{
-                      background: "none",
-                      border: "none",
-                      cursor: "pointer",
-                      fontFamily: "var(--font-body)",
-                      fontWeight: 600,
-                      color: "var(--urgency-high)",
-                      textDecoration: "underline",
-                      fontSize: "0.85rem",
-                    }}
-                  >
-                    View suggested actions →
-                  </button>
-                </div>
-              )}
-            </div>
-
-            {/* Recent requests */}
-            {postedRequests.length > 0 && (
-              <div style={{ marginBottom: "1.5rem" }}>
-                <div
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                    marginBottom: "0.75rem",
-                  }}
-                >
-                  <h3
-                    style={{
-                      fontFamily: "var(--font-display)",
-                      fontWeight: 500,
-                      fontSize: "1.05rem",
-                    }}
-                  >
-                    Recent requests
-                  </h3>
-                  <button
-                    onClick={() => setActiveTab("requests")}
-                    style={{
-                      background: "none",
-                      border: "none",
-                      cursor: "pointer",
-                      fontFamily: "var(--font-body)",
-                      fontSize: "0.8rem",
-                      fontWeight: 600,
-                      color: "var(--accent-green)",
-                    }}
-                  >
-                    View all →
-                  </button>
-                </div>
-                {postedRequests.slice(0, 3).map((req) => (
-                  <div
-                    key={req.id}
-                    className="card"
-                    style={{
-                      padding: "1rem",
-                      marginBottom: "0.5rem",
-                      display: "flex",
-                      justifyContent: "space-between",
-                      alignItems: "center",
-                    }}
-                  >
-                    <div>
-                      <div style={{ fontWeight: 600, fontSize: "0.85rem" }}>
-                        {req.title}
-                      </div>
-                      <div
-                        style={{
-                          fontSize: "0.72rem",
-                          color: "var(--text-muted)",
-                          marginTop: "0.15rem",
-                        }}
-                      >
-                        {new Date(req.deadline).toLocaleDateString("en-US", {
-                          weekday: "short",
-                          month: "short",
-                          day: "numeric",
-                        })}
-                      </div>
                     </div>
                     <div
                       style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "0.75rem",
+                        fontSize: "0.85rem",
+                        color: "var(--text-secondary)",
+                        marginTop: "0.5rem",
                       }}
                     >
-                      <div style={{ textAlign: "right" }}>
+                      more needed
+                    </div>
+                    <div
+                      style={{
+                        fontSize: "0.72rem",
+                        color: "var(--text-muted)",
+                        marginTop: "0.25rem",
+                      }}
+                    >
+                      {org.volunteer_urgency === "Critical"
+                        ? "Critical — post an urgent request"
+                        : org.volunteer_urgency === "High"
+                          ? "Your team is stretched thin"
+                          : "Manageable for now"}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Risk alert */}
+                {(atRiskVols.length > 0 || coolingVols.length > 0) && (
+                  <div
+                    style={{
+                      padding: "0.75rem 1rem",
+                      borderRadius: "var(--radius-md)",
+                      background: "rgba(201,103,62,0.06)",
+                      borderLeft: "3px solid var(--urgency-high)",
+                      marginBottom: "1.5rem",
+                      fontSize: "0.85rem",
+                      color: "var(--urgency-high)",
+                    }}
+                  >
+                    {atRiskVols.length > 0 && (
+                      <strong>
+                        {atRiskVols.length} volunteer
+                        {atRiskVols.length > 1 ? "s" : ""} at risk.{" "}
+                      </strong>
+                    )}
+                    {coolingVols.length > 0 && (
+                      <span>{coolingVols.length} cooling off. </span>
+                    )}
+                    <button
+                      onClick={() => setActiveTab("volunteers")}
+                      style={{
+                        background: "none",
+                        border: "none",
+                        cursor: "pointer",
+                        fontFamily: "var(--font-body)",
+                        fontWeight: 600,
+                        color: "var(--urgency-high)",
+                        textDecoration: "underline",
+                        fontSize: "0.85rem",
+                      }}
+                    >
+                      View actions →
+                    </button>
+                  </div>
+                )}
+
+                {/* Suggested check-ins */}
+                {(atRiskVols.length > 0 || coolingVols.length > 0) && (
+                  <div style={{ marginBottom: "1.5rem" }}>
+                    <h3
+                      style={{
+                        fontFamily: "var(--font-display)",
+                        fontWeight: 500,
+                        fontSize: "1.05rem",
+                        marginBottom: "0.75rem",
+                      }}
+                    >
+                      Suggested check-ins
+                    </h3>
+                    <div
+                      style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: "0.5rem",
+                      }}
+                    >
+                      {[...atRiskVols, ...coolingVols].map((vol) => (
                         <div
+                          key={vol.name}
                           style={{
-                            fontFamily: "var(--font-display)",
-                            fontSize: "1.1rem",
-                            fontWeight: 500,
-                            color:
-                              req.people_confirmed >= req.people_needed
-                                ? "var(--accent-green)"
-                                : "var(--urgency-high)",
+                            display: "flex",
+                            justifyContent: "space-between",
+                            alignItems: "center",
+                            padding: "0.75rem",
+                            borderRadius: "var(--radius-md)",
+                            background: statusBg(vol.status),
                           }}
                         >
-                          {req.people_confirmed}/{req.people_needed}
+                          <div
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: "0.75rem",
+                            }}
+                          >
+                            <div
+                              className="status-dot"
+                              style={{ background: statusColor(vol.status) }}
+                            />
+                            <div>
+                              <div
+                                style={{ fontSize: "0.85rem", fontWeight: 600 }}
+                              >
+                                {vol.name}
+                              </div>
+                              <div
+                                style={{
+                                  fontSize: "0.72rem",
+                                  color: "var(--text-muted)",
+                                }}
+                              >
+                                {vol.last_active_days_ago}d ago · {vol.trend}
+                              </div>
+                            </div>
+                          </div>
+                          <button
+                            className="btn btn-outline"
+                            style={{ fontSize: "0.72rem", padding: "6px 12px" }}
+                          >
+                            Check in
+                          </button>
                         </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Right column — sidebar */}
+              <div>
+                {/* Team health donut-style visual */}
+                <div
+                  className="card"
+                  style={{ padding: "1.25rem", marginBottom: "1rem" }}
+                >
+                  <h4
+                    style={{
+                      fontFamily: "var(--font-display)",
+                      fontWeight: 500,
+                      fontSize: "0.9rem",
+                      marginBottom: "1rem",
+                    }}
+                  >
+                    Team health
+                  </h4>
+
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "1.25rem",
+                    }}
+                  >
+                    {/* Donut chart */}
+                    <svg
+                      width="90"
+                      height="90"
+                      viewBox="0 0 36 36"
+                      style={{ flexShrink: 0 }}
+                    >
+                      <circle
+                        cx="18"
+                        cy="18"
+                        r="15.9"
+                        fill="none"
+                        stroke="var(--bg-tertiary)"
+                        strokeWidth="3"
+                      />
+                      {/* At risk slice */}
+                      <circle
+                        cx="18"
+                        cy="18"
+                        r="15.9"
+                        fill="none"
+                        stroke="var(--status-at-risk)"
+                        strokeWidth="3"
+                        strokeDasharray={`${(atRiskVols.length / Math.max(volunteers.length, 1)) * 100} ${100 - (atRiskVols.length / Math.max(volunteers.length, 1)) * 100}`}
+                        strokeDashoffset="25"
+                      />
+                      {/* Cooling slice */}
+                      <circle
+                        cx="18"
+                        cy="18"
+                        r="15.9"
+                        fill="none"
+                        stroke="var(--status-cooling)"
+                        strokeWidth="3"
+                        strokeDasharray={`${(coolingVols.length / Math.max(volunteers.length, 1)) * 100} ${100 - (coolingVols.length / Math.max(volunteers.length, 1)) * 100}`}
+                        strokeDashoffset={`${25 - (atRiskVols.length / Math.max(volunteers.length, 1)) * 100}`}
+                      />
+                      {/* Active slice */}
+                      <circle
+                        cx="18"
+                        cy="18"
+                        r="15.9"
+                        fill="none"
+                        stroke="var(--accent-green)"
+                        strokeWidth="3"
+                        strokeDasharray={`${(activeVols.length / Math.max(volunteers.length, 1)) * 100} ${100 - (activeVols.length / Math.max(volunteers.length, 1)) * 100}`}
+                        strokeDashoffset={`${25 - ((atRiskVols.length + coolingVols.length) / Math.max(volunteers.length, 1)) * 100}`}
+                      />
+                      {/* Center text */}
+                      <text
+                        x="18"
+                        y="17"
+                        textAnchor="middle"
+                        style={{
+                          fontFamily: "var(--font-display)",
+                          fontSize: "6px",
+                          fontWeight: 500,
+                          fill: "var(--text-primary)",
+                        }}
+                      >
+                        {volunteers.length}
+                      </text>
+                      <text
+                        x="18"
+                        y="22"
+                        textAnchor="middle"
+                        style={{ fontSize: "2.5px", fill: "var(--text-muted)" }}
+                      >
+                        total
+                      </text>
+                    </svg>
+
+                    {/* Legend */}
+                    <div
+                      style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: "0.5rem",
+                      }}
+                    >
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "0.5rem",
+                        }}
+                      >
                         <div
                           style={{
-                            fontSize: "0.65rem",
-                            color: "var(--text-muted)",
+                            width: 8,
+                            height: 8,
+                            borderRadius: "50%",
+                            background: "var(--accent-green)",
                           }}
-                        >
-                          confirmed
-                        </div>
+                        />
+                        <span style={{ fontSize: "0.75rem" }}>
+                          <strong>{activeVols.length}</strong>{" "}
+                          <span style={{ color: "var(--text-muted)" }}>
+                            active
+                          </span>
+                        </span>
                       </div>
                       <div
                         style={{
                           display: "flex",
-                          justifyContent: "space-between",
                           alignItems: "center",
-                          marginBottom: "0.5rem",
+                          gap: "0.5rem",
                         }}
                       >
                         <div
-                          className="score-bar"
-                          style={{ flex: 1, marginRight: "1rem" }}
-                        >
-                          <div
-                            className="score-bar-fill"
-                            style={{
-                              width: `${Math.min((req.people_confirmed / req.people_needed) * 100, 100)}%`,
-                              background:
-                                req.people_confirmed >= req.people_needed
-                                  ? "var(--accent-green)"
-                                  : "var(--urgency-high)",
-                            }}
-                          />
-                        </div>
-                        <button
-                          onClick={async () => {
-                            await supabase
-                              .from("urgent_requests")
-                              .delete()
-                              .eq("id", req.id);
-                            setPostedRequests((prev) =>
-                              prev.filter((r) => r.id !== req.id),
-                            );
-                          }}
                           style={{
-                            fontSize: "0.72rem",
-                            color: "var(--text-muted)",
-                            background: "none",
-                            border: "none",
-                            cursor: "pointer",
-                            fontFamily: "var(--font-body)",
-                            whiteSpace: "nowrap",
+                            width: 8,
+                            height: 8,
+                            borderRadius: "50%",
+                            background: "var(--status-cooling)",
                           }}
-                        >
-                          Cancel request
-                        </button>
+                        />
+                        <span style={{ fontSize: "0.75rem" }}>
+                          <strong>{coolingVols.length}</strong>{" "}
+                          <span style={{ color: "var(--text-muted)" }}>
+                            cooling
+                          </span>
+                        </span>
                       </div>
                       <div
-                        className="score-bar-fill"
                         style={{
-                          width: `${Math.min((req.people_confirmed / req.people_needed) * 100, 100)}%`,
-                          background:
-                            req.people_confirmed >= req.people_needed
-                              ? "var(--accent-green)"
-                              : "var(--urgency-high)",
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "0.5rem",
                         }}
-                      />
+                      >
+                        <div
+                          style={{
+                            width: 8,
+                            height: 8,
+                            borderRadius: "50%",
+                            background: "var(--status-at-risk)",
+                          }}
+                        />
+                        <span style={{ fontSize: "0.75rem" }}>
+                          <strong>{atRiskVols.length}</strong>{" "}
+                          <span style={{ color: "var(--text-muted)" }}>
+                            at risk
+                          </span>
+                        </span>
+                      </div>
                     </div>
                   </div>
-                ))}
-              </div>
-            )}
+                </div>
 
-            {/* Suggested check-ins */}
-            {(atRiskVols.length > 0 || coolingVols.length > 0) && (
-              <div className="card" style={{ padding: "1.5rem" }}>
-                <h3
-                  style={{
-                    fontFamily: "var(--font-display)",
-                    fontWeight: 500,
-                    fontSize: "1.05rem",
-                    marginBottom: "0.5rem",
-                  }}
-                >
-                  Suggested check-ins
-                </h3>
-                <p
-                  style={{
-                    fontSize: "0.8rem",
-                    color: "var(--text-muted)",
-                    marginBottom: "1rem",
-                  }}
-                >
-                  These volunteers may need a personal message to stay engaged.
-                </p>
-                <div
-                  style={{
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: "0.5rem",
-                  }}
-                >
-                  {[...atRiskVols, ...coolingVols].map((vol) => (
+                {/* Recent requests sidebar */}
+                {postedRequests.length > 0 && (
+                  <div className="card" style={{ padding: "1.25rem" }}>
                     <div
-                      key={vol.name}
                       style={{
                         display: "flex",
                         justifyContent: "space-between",
                         alignItems: "center",
-                        padding: "0.75rem",
-                        borderRadius: "var(--radius-md)",
-                        background: statusBg(vol.status),
+                        marginBottom: "0.75rem",
                       }}
                     >
-                      <div
+                      <h4
                         style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: "0.75rem",
+                          fontFamily: "var(--font-display)",
+                          fontWeight: 500,
+                          fontSize: "0.9rem",
                         }}
                       >
+                        Open requests
+                      </h4>
+                      <button
+                        onClick={() => setActiveTab("requests")}
+                        style={{
+                          background: "none",
+                          border: "none",
+                          cursor: "pointer",
+                          fontFamily: "var(--font-body)",
+                          fontSize: "0.72rem",
+                          fontWeight: 600,
+                          color: "var(--accent-green)",
+                        }}
+                      >
+                        All →
+                      </button>
+                    </div>
+                    <div
+                      style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: "0.5rem",
+                      }}
+                    >
+                      {postedRequests.slice(0, 4).map((req) => (
                         <div
-                          className="status-dot"
-                          style={{ background: statusColor(vol.status) }}
-                        />
-                        <div>
-                          <div style={{ fontSize: "0.85rem", fontWeight: 600 }}>
-                            {vol.name}
+                          key={req.id}
+                          style={{
+                            display: "flex",
+                            justifyContent: "space-between",
+                            alignItems: "center",
+                            padding: "0.5rem 0",
+                            borderBottom: "1px solid var(--border-light)",
+                          }}
+                        >
+                          <div>
+                            <div
+                              style={{ fontSize: "0.8rem", fontWeight: 500 }}
+                            >
+                              {req.title}
+                            </div>
+                            <div
+                              style={{
+                                fontSize: "0.65rem",
+                                color: "var(--text-muted)",
+                              }}
+                            >
+                              {new Date(req.deadline).toLocaleDateString(
+                                "en-US",
+                                { month: "short", day: "numeric" },
+                              )}
+                            </div>
                           </div>
                           <div
                             style={{
-                              fontSize: "0.72rem",
-                              color: "var(--text-muted)",
+                              fontFamily: "var(--font-display)",
+                              fontSize: "0.95rem",
+                              fontWeight: 500,
+                              color:
+                                req.people_confirmed >= req.people_needed
+                                  ? "var(--accent-green)"
+                                  : "var(--urgency-high)",
                             }}
                           >
-                            Last active {vol.last_active_days_ago} days ago ·{" "}
-                            {vol.trend}
+                            {req.people_confirmed}/{req.people_needed}
                           </div>
                         </div>
-                      </div>
-                      <button
-                        className="btn btn-outline"
-                        style={{ fontSize: "0.72rem", padding: "6px 12px" }}
-                      >
-                        Send Check-in
-                      </button>
+                      ))}
                     </div>
-                  ))}
-                </div>
+                  </div>
+                )}
+
+                {postedRequests.length === 0 && (
+                  <div
+                    className="card"
+                    style={{ padding: "1.25rem", textAlign: "center" }}
+                  >
+                    <p
+                      style={{
+                        fontSize: "0.8rem",
+                        color: "var(--text-muted)",
+                        marginBottom: "0.75rem",
+                      }}
+                    >
+                      No open requests
+                    </p>
+                    <button
+                      onClick={() => {
+                        setActiveTab("requests");
+                        setShowGeneralForm(true);
+                      }}
+                      className="btn btn-outline"
+                      style={{
+                        fontSize: "0.75rem",
+                        padding: "6px 14px",
+                        width: "100%",
+                      }}
+                    >
+                      Post your first request
+                    </button>
+                  </div>
+                )}
               </div>
-            )}
+            </div>
           </div>
         )}
 
@@ -1127,7 +1170,7 @@ export default function CoordinatorDashboard() {
                         onChange={(e) =>
                           setUrgentForm({
                             ...urgentForm,
-                            people_needed: parseInt(e.target.value) || 1,
+                            people_needed: parseInt(e.target.value),
                           })
                         }
                         style={inputStyle}
@@ -1277,7 +1320,7 @@ export default function CoordinatorDashboard() {
                         onChange={(e) =>
                           setGeneralForm({
                             ...generalForm,
-                            people_needed: parseInt(e.target.value) || 1,
+                            people_needed: parseInt(e.target.value),
                           })
                         }
                         style={inputStyle}
@@ -1428,49 +1471,43 @@ export default function CoordinatorDashboard() {
                     </span>
                   ))}
                 </div>
-                <div className="score-bar">
-                  <div
+                <div
+                  style={{ display: "flex", alignItems: "center", gap: "1rem" }}
+                >
+                  <div className="score-bar" style={{ flex: 1 }}>
+                    <div
+                      className="score-bar-fill"
+                      style={{
+                        width: `${Math.min((req.people_confirmed / req.people_needed) * 100, 100)}%`,
+                        background:
+                          req.people_confirmed >= req.people_needed
+                            ? "var(--accent-green)"
+                            : "var(--urgency-high)",
+                      }}
+                    />
+                  </div>
+                  <button
+                    onClick={async () => {
+                      await supabase
+                        .from("urgent_requests")
+                        .delete()
+                        .eq("id", req.id);
+                      setPostedRequests((prev) =>
+                        prev.filter((r) => r.id !== req.id),
+                      );
+                    }}
                     style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "1rem",
+                      fontSize: "0.75rem",
+                      color: "var(--text-muted)",
+                      background: "none",
+                      border: "none",
+                      cursor: "pointer",
+                      fontFamily: "var(--font-body)",
+                      whiteSpace: "nowrap",
                     }}
                   >
-                    <div className="score-bar" style={{ flex: 1 }}>
-                      <div
-                        className="score-bar-fill"
-                        style={{
-                          width: `${Math.min((req.people_confirmed / req.people_needed) * 100, 100)}%`,
-                          background:
-                            req.people_confirmed >= req.people_needed
-                              ? "var(--accent-green)"
-                              : "var(--urgency-high)",
-                        }}
-                      />
-                    </div>
-                    <button
-                      onClick={async () => {
-                        await supabase
-                          .from("urgent_requests")
-                          .delete()
-                          .eq("id", req.id);
-                        setPostedRequests((prev) =>
-                          prev.filter((r) => r.id !== req.id),
-                        );
-                      }}
-                      style={{
-                        fontSize: "0.75rem",
-                        color: "var(--text-muted)",
-                        background: "none",
-                        border: "none",
-                        cursor: "pointer",
-                        fontFamily: "var(--font-body)",
-                        whiteSpace: "nowrap",
-                      }}
-                    >
-                      Cancel request
-                    </button>
-                  </div>
+                    Cancel request
+                  </button>
                 </div>
               </div>
             ))}
@@ -1588,201 +1625,6 @@ export default function CoordinatorDashboard() {
                   statusBg={statusBg}
                 />
               ))}
-          </div>
-        )}
-        {activeTab === "handoffs" && (
-          <div>
-            <h2
-              style={{
-                fontFamily: "var(--font-display)",
-                fontSize: "1.5rem",
-                fontWeight: 500,
-                marginBottom: "0.25rem",
-              }}
-            >
-              Knowledge Base
-            </h2>
-            <p
-              style={{
-                fontSize: "0.85rem",
-                color: "var(--text-secondary)",
-                marginBottom: "1.5rem",
-              }}
-            >
-              When a volunteer leaves, their experience doesn&apos;t have to
-              leave with them. Handoff documents capture what they learned so
-              the next person can hit the ground running.
-            </p>
-
-            <div
-              className="card"
-              style={{ padding: "1.5rem", marginBottom: "1rem" }}
-            >
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  marginBottom: "0.75rem",
-                }}
-              >
-                <h3
-                  style={{ fontFamily: "var(--font-display)", fontWeight: 500 }}
-                >
-                  Meal Delivery — East Van Route
-                </h3>
-                <span className="tag tag-skill">Documented</span>
-              </div>
-              <div
-                style={{
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: "0.4rem",
-                  fontSize: "0.85rem",
-                  color: "var(--text-secondary)",
-                }}
-              >
-                <div>
-                  <strong style={{ color: "var(--text-primary)" }}>
-                    Key contacts:
-                  </strong>{" "}
-                  Maria (kitchen, ext 204), Joe (warehouse, arrives 7am)
-                </div>
-                <div>
-                  <strong style={{ color: "var(--text-primary)" }}>
-                    Tasks:
-                  </strong>{" "}
-                  Pick up by 9am from 4885 Valley Dr, follow route sheet, return
-                  bins by 1pm
-                </div>
-                <div>
-                  <strong style={{ color: "var(--text-primary)" }}>
-                    Tips:
-                  </strong>{" "}
-                  Buzzer code 7742 at 41st. Mrs. Chen (3rd floor) needs door
-                  delivery. Bring extra bags.
-                </div>
-              </div>
-              <div
-                style={{
-                  marginTop: "0.6rem",
-                  fontSize: "0.72rem",
-                  color: "var(--text-muted)",
-                }}
-              >
-                Written by: Previous volunteer · 3 weeks ago
-              </div>
-            </div>
-
-            <div
-              className="card"
-              style={{ padding: "1.5rem", marginBottom: "1rem" }}
-            >
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  marginBottom: "0.75rem",
-                }}
-              >
-                <h3
-                  style={{ fontFamily: "var(--font-display)", fontWeight: 500 }}
-                >
-                  Event Setup Coordinator
-                </h3>
-                <span className="tag tag-skill">Documented</span>
-              </div>
-              <div
-                style={{
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: "0.4rem",
-                  fontSize: "0.85rem",
-                  color: "var(--text-secondary)",
-                }}
-              >
-                <div>
-                  <strong style={{ color: "var(--text-primary)" }}>
-                    Key contacts:
-                  </strong>{" "}
-                  Priya (venue liaison), building manager Sam (604-555-0142)
-                </div>
-                <div>
-                  <strong style={{ color: "var(--text-primary)" }}>
-                    Tasks:
-                  </strong>{" "}
-                  Arrive 2hrs early, unlock storage room B, set up 12 tables +
-                  48 chairs, test AV
-                </div>
-                <div>
-                  <strong style={{ color: "var(--text-primary)" }}>
-                    Tips:
-                  </strong>{" "}
-                  Projector remote is in the top drawer, not the AV cabinet.
-                  Always bring extension cords — venue never has enough.
-                </div>
-              </div>
-              <div
-                style={{
-                  marginTop: "0.6rem",
-                  fontSize: "0.72rem",
-                  color: "var(--text-muted)",
-                }}
-              >
-                Written by: Elena Andersen · 1 week ago
-              </div>
-            </div>
-
-            <div
-              className="card"
-              style={{
-                padding: "1.5rem",
-                borderLeft: "3px solid var(--urgency-high)",
-              }}
-            >
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  marginBottom: "0.75rem",
-                }}
-              >
-                <h3
-                  style={{ fontFamily: "var(--font-display)", fontWeight: 500 }}
-                >
-                  Saturday Kitchen Lead
-                </h3>
-                <span
-                  className="tag"
-                  style={{
-                    background: "rgba(201,103,62,0.12)",
-                    color: "var(--urgency-high)",
-                    border: "1px solid rgba(201,103,62,0.2)",
-                  }}
-                >
-                  Not yet documented
-                </span>
-              </div>
-              <p
-                style={{
-                  fontSize: "0.85rem",
-                  color: "var(--text-muted)",
-                  marginBottom: "0.75rem",
-                }}
-              >
-                Ben Dubois has been in this role for 6 months but is flagged as
-                at-risk. If he leaves without documenting, the next volunteer
-                starts from scratch.
-              </p>
-              <button
-                className="btn btn-outline"
-                style={{ fontSize: "0.8rem" }}
-              >
-                Ask Ben to document this role
-              </button>
-            </div>
           </div>
         )}
       </div>
