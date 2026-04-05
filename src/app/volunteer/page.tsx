@@ -141,6 +141,7 @@ function ExpandedDetails({ expanded, children }: { expanded: boolean; children: 
 
 export default function VolunteerDashboard() {
   const [activeTab, setActiveTab] = useState<Tab>("browse");
+  const [searchQuery, setSearchQuery] = useState("");
   const [orgs, setOrgs] = useState<Org[]>([]);
   const [urgentRequests, setUrgentRequests] = useState<(UrgentRequest & { org?: Org })[]>([]);
   const [rankedOrgs, setRankedOrgs] = useState<RankedOrg[]>([]);
@@ -280,6 +281,42 @@ export default function VolunteerDashboard() {
     { id: "handoffs", label: "Handoffs" },
   ];
 
+  const normalizedSearch = searchQuery.trim().toLowerCase();
+  const matchesSearch = (...values: Array<string | undefined | null>) =>
+    normalizedSearch.length === 0 ||
+    values.some((value) => (value || "").toLowerCase().includes(normalizedSearch));
+
+  const filteredUrgentRequests = urgentRequests.filter((request) =>
+    matchesSearch(
+      request.title,
+      request.description,
+      request.org?.account_name,
+      request.org?.legal_name,
+      request.org?.city,
+      request.org?.availability_preference,
+      request.skills_required?.join(" "),
+      request.languages_required?.join(" "),
+    )
+  );
+
+  const filteredRankedOrgs = rankedOrgs.filter(({ org }) =>
+    matchesSearch(
+      org.account_name,
+      org.legal_name,
+      org.sector,
+      org.city,
+      org.province,
+      org.org_size,
+      org.availability_preference,
+      org.skills_needed?.join(" "),
+      org.languages_needed?.join(" "),
+    )
+  );
+
+  const filteredPlannedContributions = plannedContributions.filter((item) =>
+    matchesSearch(item.title, item.orgName, item.location, item.timing, item.details)
+  );
+
   if (loading) {
     return (
       <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "var(--bg-primary)" }}>
@@ -326,6 +363,29 @@ export default function VolunteerDashboard() {
       </div>
 
       <div style={{ maxWidth: "860px", margin: "0 auto", padding: "2rem 1.5rem" }}>
+        <div style={{ marginBottom: "1.5rem" }}>
+          <input
+            type="search"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder={
+              activeTab === "plans"
+                ? "Search your plans"
+                : "Search organizations, skills, locations..."
+            }
+            style={{
+              width: "100%",
+              padding: "12px 14px",
+              borderRadius: "12px",
+              border: "1.5px solid var(--border-light)",
+              background: "var(--bg-card)",
+              fontSize: "0.9rem",
+              color: "var(--text-primary)",
+              outline: "none",
+              boxShadow: "var(--shadow-sm)",
+            }}
+          />
+        </div>
 
         {/* ══ BROWSE ══ */}
         {activeTab === "browse" && (
@@ -338,10 +398,14 @@ export default function VolunteerDashboard() {
             </p>
 
             {/* Urgent request cards */}
-            {urgentRequests.map((request) => {
+            {filteredUrgentRequests.map((request) => {
               const score = request.org ? computeMatchScore(volunteer, request.org).score : 0;
               const cardId = `urgent-${request.id}`;
               const isHovered = hoveredCard === cardId;
+              const spotsLeft = Math.max(
+                1,
+                (request.people_needed || 0) - (request.people_confirmed || 0),
+              );
 
               return (
                 <div
@@ -368,7 +432,7 @@ export default function VolunteerDashboard() {
                       </p>
                     </div>
                     <ScoreNumber
-                      value={request.people_needed - request.people_confirmed}
+                      value={spotsLeft}
                       color="var(--urgency-critical)"
                       isHovered={isHovered}
                       unit="spots left"
@@ -428,7 +492,7 @@ export default function VolunteerDashboard() {
             })}
 
             {/* Org opportunity cards */}
-            {rankedOrgs.map(({ org, score, breakdown }) => {
+            {filteredRankedOrgs.map(({ org, score, breakdown }) => {
               const cardId = `org-${org.id}`;
               const isHovered = hoveredCard === cardId;
               const isPlanned = plannedContributions.some((item) => item.id === cardId);
@@ -527,6 +591,13 @@ export default function VolunteerDashboard() {
                 </div>
               );
             })}
+            {filteredUrgentRequests.length === 0 && filteredRankedOrgs.length === 0 && (
+              <div className="card" style={{ padding: "3rem", textAlign: "center" }}>
+                <p style={{ color: "var(--text-muted)" }}>
+                  No opportunities match your search right now.
+                </p>
+              </div>
+            )}
           </div>
         )}
 
@@ -537,7 +608,7 @@ export default function VolunteerDashboard() {
             <p style={{ fontSize: "0.85rem", color: "var(--text-secondary)", marginBottom: "1.5rem" }}>
               Events and shifts you&apos;ve checked into appear here.
             </p>
-            {plannedContributions.map((item) => (
+            {filteredPlannedContributions.map((item) => (
               <div key={item.id} className="card" style={{ padding: "1.5rem", marginBottom: "1rem" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start", marginBottom: "0.75rem" }}>
                   <div>
@@ -577,9 +648,13 @@ export default function VolunteerDashboard() {
                 </div>
               </div>
             ))}
-            {plannedContributions.length === 0 && (
+            {filteredPlannedContributions.length === 0 && (
               <div className="card" style={{ padding: "3rem", textAlign: "center" }}>
-                <p style={{ color: "var(--text-muted)" }}>You haven&apos;t checked into anything yet. Browse opportunities to get started.</p>
+                <p style={{ color: "var(--text-muted)" }}>
+                  {plannedContributions.length === 0
+                    ? "You haven&apos;t checked into anything yet. Browse opportunities to get started."
+                    : "No plans match your search."}
+                </p>
               </div>
             )}
           </div>

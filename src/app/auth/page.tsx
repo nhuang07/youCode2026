@@ -5,7 +5,6 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 
 type UserRole = "volunteer" | "coordinator";
-type BackgroundCheckStatus = "Completed" | "In progress" | "Not yet";
 type VolunteerSignupStep = "account" | "survey";
 
 interface VolunteerSurveyState {
@@ -20,7 +19,6 @@ interface VolunteerSurveyState {
   hoursPerMonth: string;
   priorExperience: string;
   hasVehicle: boolean | null;
-  backgroundCheckStatus: BackgroundCheckStatus | "";
 }
 
 const NEIGHBOURHOODS = [
@@ -116,11 +114,7 @@ const AVAILABILITY_OPTIONS = [
   "Evenings only",
 ];
 const EXPERIENCE_OPTIONS = ["None", "Some (1–2 orgs)", "Experienced (3+ orgs)"];
-const BACKGROUND_CHECK_OPTIONS: BackgroundCheckStatus[] = [
-  "Completed",
-  "In progress",
-  "Not yet",
-];
+
 
 const initialSurveyState: VolunteerSurveyState = {
   firstName: "",
@@ -134,7 +128,6 @@ const initialSurveyState: VolunteerSurveyState = {
   hoursPerMonth: "",
   priorExperience: "",
   hasVehicle: null,
-  backgroundCheckStatus: "",
 };
 
 function toggleMultiValue(values: string[], value: string) {
@@ -303,7 +296,9 @@ function AuthSidebar({
         padding: "1.5rem 2.5rem 3rem",
         background: "var(--bg-secondary)",
         borderRight: "1px solid var(--border-light)",
-        minHeight: "100%",
+        height: "100vh",
+        position: "sticky",
+        top: 0,
       }}
     >
       {/* Logo */}
@@ -506,8 +501,6 @@ function AuthContent() {
     if (!survey.priorExperience) return "Please choose your prior experience.";
     if (survey.hasVehicle === null)
       return "Please tell us whether you have access to a vehicle.";
-    if (!survey.backgroundCheckStatus)
-      return "Please choose your background check status.";
     return "";
   };
 
@@ -558,10 +551,11 @@ function AuthContent() {
   return (
     <div
       style={{
-        minHeight: "100vh",
+        height: "100vh",
         display: "grid",
         gridTemplateColumns: "340px 1fr",
         background: "var(--bg-primary)",
+        overflow: "hidden",
       }}
     >
       {/* ── Left sidebar ── */}
@@ -571,7 +565,7 @@ function AuthContent() {
       <div
         style={{
           overflowY: "auto",
-          minHeight: "100vh",
+          height: "100vh",
           display: "flex",
           alignItems: showSurvey ? "flex-start" : "center",
           justifyContent: "center",
@@ -982,7 +976,6 @@ function AuthContent() {
                       </div>
                     </div>
                     <div>
-                      <label style={labelStyle}>Background check</label>
                       <div
                         style={{
                           display: "flex",
@@ -991,19 +984,7 @@ function AuthContent() {
                           marginTop: "2px",
                         }}
                       >
-                        {BACKGROUND_CHECK_OPTIONS.map((o) => (
-                          <Chip
-                            key={o}
-                            label={o}
-                            selected={survey.backgroundCheckStatus === o}
-                            onClick={() =>
-                              setSurvey((c) => ({
-                                ...c,
-                                backgroundCheckStatus: o,
-                              }))
-                            }
-                          />
-                        ))}
+                      
                       </div>
                     </div>
                   </div>
