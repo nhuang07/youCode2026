@@ -9,11 +9,12 @@ import {
   DemoVolunteerSummary,
 } from "@/lib/demo-data";
 
-type Tab = "overview" | "urgent" | "volunteers" | "handoffs";
+type Tab = "overview" | "requests" | "volunteers" | "handoffs";
 
 export default function CoordinatorDashboard() {
   const [activeTab, setActiveTab] = useState<Tab>("overview");
   const [showUrgentForm, setShowUrgentForm] = useState(false);
+  const [showGeneralForm, setShowGeneralForm] = useState(false);
   const [org, setOrg] = useState<Org | null>(null);
   const [allOrgs, setAllOrgs] = useState<Org[]>([]);
   const [claimSearch, setClaimSearch] = useState("");
@@ -27,12 +28,20 @@ export default function CoordinatorDashboard() {
     skills: "",
     languages: "",
   });
+  const [generalForm, setGeneralForm] = useState({
+    title: "",
+    description: "",
+    people_needed: 1,
+    skills: "",
+    languages: "",
+  });
   const [orgsLoading, setOrgsLoading] = useState(true);
 
   const volunteers = DEMO_VOLUNTEER_SUMMARIES;
   const activeVols = volunteers.filter((v) => v.status === "active");
   const coolingVols = volunteers.filter((v) => v.status === "cooling");
   const atRiskVols = volunteers.filter((v) => v.status === "at-risk");
+  const totalHours = volunteers.reduce((sum, v) => sum + v.total_hours, 0);
 
   useEffect(() => {
     async function fetchOrgs() {
@@ -138,6 +147,48 @@ export default function CoordinatorDashboard() {
     setSubmitting(false);
   };
 
+  const handlePostGeneral = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!org) return;
+    setSubmitting(true);
+    const deadline = new Date();
+    deadline.setDate(deadline.getDate() + 30);
+    const { data, error } = await supabase
+      .from("urgent_requests")
+      .insert({
+        org_id: org.id,
+        title: generalForm.title,
+        description: generalForm.description,
+        deadline: deadline.toISOString(),
+        people_needed: generalForm.people_needed,
+        people_confirmed: 0,
+        skills_required: generalForm.skills
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean),
+        languages_required: generalForm.languages
+          .split(",")
+          .map((l) => l.trim())
+          .filter(Boolean),
+        background_check_required: org.background_check_required,
+        is_remote: false,
+        status: "active",
+      })
+      .select();
+    if (!error && data) {
+      setPostedRequests((prev) => [data[0] as UrgentRequest, ...prev]);
+      setShowGeneralForm(false);
+      setGeneralForm({
+        title: "",
+        description: "",
+        people_needed: 1,
+        skills: "",
+        languages: "",
+      });
+    }
+    setSubmitting(false);
+  };
+
   const statusColor = (s: string) =>
     ({
       active: "var(--status-active)",
@@ -207,7 +258,7 @@ export default function CoordinatorDashboard() {
                 fontSize: "0.95rem",
               }}
             >
-              Find and claim your organization
+              Find your organization to get started
             </p>
           </div>
           <div className="card" style={{ padding: "1.5rem" }}>
@@ -215,7 +266,7 @@ export default function CoordinatorDashboard() {
               type="text"
               value={claimSearch}
               onChange={(e) => setClaimSearch(e.target.value)}
-              placeholder="Search for your organization..."
+              placeholder="Type your organization name..."
               style={{ ...inputStyle, marginBottom: "0.75rem" }}
             />
             {orgsLoading && (
@@ -352,16 +403,6 @@ export default function CoordinatorDashboard() {
           <span style={{ fontSize: "0.8rem", color: "var(--text-secondary)" }}>
             {org.account_name || org.legal_name}
           </span>
-          <button
-            onClick={() => {
-              setActiveTab("urgent");
-              setShowUrgentForm(true);
-            }}
-            className="btn btn-urgent"
-            style={{ fontSize: "0.8rem", padding: "8px 16px" }}
-          >
-            Post Urgent Request
-          </button>
           <Link
             href="/"
             className="btn btn-ghost"
@@ -372,6 +413,7 @@ export default function CoordinatorDashboard() {
         </div>
       </nav>
 
+      {/* Tabs */}
       <div
         style={{
           display: "flex",
@@ -380,42 +422,38 @@ export default function CoordinatorDashboard() {
           borderBottom: "1px solid var(--border-light)",
         }}
       >
-        {(["overview", "urgent", "volunteers", "handoffs"] as Tab[]).map(
-          (tab) => (
-            <button
-              key={tab}
-              onClick={() => setActiveTab(tab)}
-              style={{
-                padding: "0.6rem 1rem",
-                fontSize: "0.85rem",
-                fontWeight: 500,
-                fontFamily: "var(--font-body)",
-                color:
-                  activeTab === tab
-                    ? "var(--accent-green)"
-                    : "var(--text-muted)",
-                borderBottom:
-                  activeTab === tab
-                    ? "2px solid var(--accent-green)"
-                    : "2px solid transparent",
-                background: "none",
-                borderTop: "none",
-                borderLeft: "none",
-                borderRight: "none",
-                cursor: "pointer",
-              }}
-            >
-              {
-                {
-                  overview: "Dashboard",
-                  urgent: "Crisis Requests",
-                  volunteers: "My Volunteers",
-                  handoffs: "Knowledge Base",
-                }[tab]
-              }
-            </button>
-          ),
-        )}
+        {[
+          { id: "overview" as Tab, label: "Dashboard" },
+          { id: "requests" as Tab, label: "Requests" },
+          { id: "volunteers" as Tab, label: "Volunteers" },
+          { id: "handoffs" as Tab, label: "Knowledge Base" },
+        ].map((tab) => (
+          <button
+            key={tab.id}
+            onClick={() => setActiveTab(tab.id)}
+            style={{
+              padding: "0.6rem 1rem",
+              fontSize: "0.85rem",
+              fontWeight: 500,
+              fontFamily: "var(--font-body)",
+              color:
+                activeTab === tab.id
+                  ? "var(--accent-green)"
+                  : "var(--text-muted)",
+              borderBottom:
+                activeTab === tab.id
+                  ? "2px solid var(--accent-green)"
+                  : "2px solid transparent",
+              background: "none",
+              borderTop: "none",
+              borderLeft: "none",
+              borderRight: "none",
+              cursor: "pointer",
+            }}
+          >
+            {tab.label}
+          </button>
+        ))}
       </div>
 
       <div
@@ -424,104 +462,60 @@ export default function CoordinatorDashboard() {
         {/* ── DASHBOARD ── */}
         {activeTab === "overview" && (
           <div>
-            <h2
-              style={{
-                fontFamily: "var(--font-display)",
-                fontSize: "1.5rem",
-                fontWeight: 500,
-                marginBottom: "1.5rem",
-              }}
-            >
-              Organization Health
-            </h2>
-
+            {/* Welcome + action buttons */}
             <div
-              className="card"
               style={{
-                padding: "1.25rem",
-                marginBottom: "1.5rem",
                 display: "flex",
                 justifyContent: "space-between",
-                alignItems: "center",
-              }}
-            >
-              <div>
-                <div
-                  style={{
-                    fontFamily: "var(--font-display)",
-                    fontWeight: 500,
-                    fontSize: "1.1rem",
-                  }}
-                >
-                  {org.account_name || org.legal_name}
-                </div>
-                <div
-                  style={{ fontSize: "0.8rem", color: "var(--text-secondary)" }}
-                >
-                  {org.sector} · {org.org_size} · {org.city}
-                </div>
-              </div>
-              <span
-                className={`urgency-badge urgency-${org.volunteer_urgency.toLowerCase()}`}
-              >
-                {org.volunteer_urgency} need
-              </span>
-            </div>
-
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(4, 1fr)",
-                gap: "1rem",
+                alignItems: "start",
                 marginBottom: "2rem",
               }}
             >
-              {[
-                {
-                  n: org.volunteers_currently_needed,
-                  l: "Volunteers needed",
-                  c: "var(--urgency-critical)",
-                },
-                { n: activeVols.length, l: "Active", c: "var(--accent-green)" },
-                {
-                  n: coolingVols.length,
-                  l: "Cooling off",
-                  c: "var(--status-cooling)",
-                },
-                {
-                  n: atRiskVols.length,
-                  l: "At risk",
-                  c: "var(--status-at-risk)",
-                },
-              ].map((s) => (
-                <div
-                  key={s.l}
-                  className="card"
-                  style={{ padding: "1.25rem", textAlign: "center" }}
+              <div>
+                <h2
+                  style={{
+                    fontFamily: "var(--font-display)",
+                    fontSize: "1.5rem",
+                    fontWeight: 500,
+                    marginBottom: "0.25rem",
+                  }}
                 >
-                  <div
-                    style={{
-                      fontFamily: "var(--font-display)",
-                      fontSize: "1.75rem",
-                      fontWeight: 500,
-                      color: s.c,
-                    }}
-                  >
-                    {s.n}
-                  </div>
-                  <div
-                    style={{
-                      fontSize: "0.75rem",
-                      color: "var(--text-muted)",
-                      marginTop: "0.25rem",
-                    }}
-                  >
-                    {s.l}
-                  </div>
-                </div>
-              ))}
+                  Welcome back
+                </h2>
+                <p
+                  style={{
+                    fontSize: "0.85rem",
+                    color: "var(--text-secondary)",
+                  }}
+                >
+                  {org.account_name || org.legal_name} · {org.sector}
+                </p>
+              </div>
+              <div style={{ display: "flex", gap: "0.5rem" }}>
+                <button
+                  onClick={() => {
+                    setActiveTab("requests");
+                    setShowGeneralForm(true);
+                  }}
+                  className="btn btn-outline"
+                  style={{ fontSize: "0.8rem", padding: "8px 16px" }}
+                >
+                  Post Request
+                </button>
+                <button
+                  onClick={() => {
+                    setActiveTab("requests");
+                    setShowUrgentForm(true);
+                  }}
+                  className="btn btn-urgent"
+                  style={{ fontSize: "0.8rem", padding: "8px 16px" }}
+                >
+                  Urgent Request
+                </button>
+              </div>
             </div>
 
+            {/* At-a-glance stats — human-readable sentences */}
             <div
               className="card"
               style={{ padding: "1.5rem", marginBottom: "1.5rem" }}
@@ -530,40 +524,224 @@ export default function CoordinatorDashboard() {
                 style={{
                   fontFamily: "var(--font-display)",
                   fontWeight: 500,
+                  fontSize: "1.05rem",
                   marginBottom: "1rem",
                 }}
               >
-                Suggested Check-ins{" "}
-                <span
-                  style={{
-                    fontSize: "0.75rem",
-                    fontWeight: 400,
-                    fontFamily: "var(--font-body)",
-                    color: "var(--text-muted)",
-                  }}
-                >
-                  — powered by engagement pattern detection
-                </span>
+                Your team right now
               </h3>
               <div
                 style={{
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: "0.5rem",
+                  display: "grid",
+                  gridTemplateColumns: "1fr 1fr",
+                  gap: "1rem",
                 }}
               >
-                {[...atRiskVols, ...coolingVols].map((vol) => (
+                <div
+                  style={{
+                    padding: "1rem",
+                    borderRadius: "var(--radius-md)",
+                    background: "var(--accent-matcha-pale)",
+                  }}
+                >
                   <div
-                    key={vol.name}
                     style={{
+                      display: "flex",
+                      alignItems: "baseline",
+                      gap: "0.5rem",
+                    }}
+                  >
+                    <span
+                      style={{
+                        fontFamily: "var(--font-display)",
+                        fontSize: "2rem",
+                        fontWeight: 500,
+                        color: "var(--accent-green)",
+                      }}
+                    >
+                      {activeVols.length}
+                    </span>
+                    <span
+                      style={{
+                        fontSize: "0.85rem",
+                        color: "var(--accent-green-dark)",
+                      }}
+                    >
+                      active volunteers
+                    </span>
+                  </div>
+                  <div
+                    style={{
+                      fontSize: "0.75rem",
+                      color: "var(--text-muted)",
+                      marginTop: "0.25rem",
+                    }}
+                  >
+                    {totalHours} total hours contributed
+                  </div>
+                </div>
+                <div
+                  style={{
+                    padding: "1rem",
+                    borderRadius: "var(--radius-md)",
+                    background:
+                      org.volunteers_currently_needed > 10
+                        ? "rgba(192,58,58,0.08)"
+                        : "var(--bg-secondary)",
+                  }}
+                >
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "baseline",
+                      gap: "0.5rem",
+                    }}
+                  >
+                    <span
+                      style={{
+                        fontFamily: "var(--font-display)",
+                        fontSize: "2rem",
+                        fontWeight: 500,
+                        color:
+                          org.volunteers_currently_needed > 10
+                            ? "var(--urgency-critical)"
+                            : "var(--text-primary)",
+                      }}
+                    >
+                      {org.volunteers_currently_needed}
+                    </span>
+                    <span
+                      style={{
+                        fontSize: "0.85rem",
+                        color: "var(--text-secondary)",
+                      }}
+                    >
+                      more volunteers needed
+                    </span>
+                  </div>
+                  <div
+                    style={{
+                      fontSize: "0.75rem",
+                      color: "var(--text-muted)",
+                      marginTop: "0.25rem",
+                    }}
+                  >
+                    {org.volunteer_urgency === "Critical"
+                      ? "Critical — consider posting an urgent request"
+                      : org.volunteer_urgency === "High"
+                        ? "High need — your team is stretched thin"
+                        : "Manageable for now"}
+                  </div>
+                </div>
+              </div>
+
+              {/* Risk summary — only show if there are at-risk or cooling */}
+              {(atRiskVols.length > 0 || coolingVols.length > 0) && (
+                <div
+                  style={{
+                    marginTop: "1rem",
+                    padding: "0.75rem 1rem",
+                    borderRadius: "var(--radius-md)",
+                    background: "rgba(201,103,62,0.08)",
+                    fontSize: "0.85rem",
+                    color: "var(--urgency-high)",
+                  }}
+                >
+                  ⚠{" "}
+                  {atRiskVols.length > 0 && (
+                    <strong>
+                      {atRiskVols.length} volunteer
+                      {atRiskVols.length > 1 ? "s" : ""} at risk of
+                      leaving.{" "}
+                    </strong>
+                  )}
+                  {coolingVols.length > 0 && (
+                    <span>{coolingVols.length} cooling off. </span>
+                  )}
+                  <button
+                    onClick={() => setActiveTab("volunteers")}
+                    style={{
+                      background: "none",
+                      border: "none",
+                      cursor: "pointer",
+                      fontFamily: "var(--font-body)",
+                      fontWeight: 600,
+                      color: "var(--urgency-high)",
+                      textDecoration: "underline",
+                      fontSize: "0.85rem",
+                    }}
+                  >
+                    View suggested actions →
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Recent requests */}
+            {postedRequests.length > 0 && (
+              <div style={{ marginBottom: "1.5rem" }}>
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    marginBottom: "0.75rem",
+                  }}
+                >
+                  <h3
+                    style={{
+                      fontFamily: "var(--font-display)",
+                      fontWeight: 500,
+                      fontSize: "1.05rem",
+                    }}
+                  >
+                    Recent requests
+                  </h3>
+                  <button
+                    onClick={() => setActiveTab("requests")}
+                    style={{
+                      background: "none",
+                      border: "none",
+                      cursor: "pointer",
+                      fontFamily: "var(--font-body)",
+                      fontSize: "0.8rem",
+                      fontWeight: 600,
+                      color: "var(--accent-green)",
+                    }}
+                  >
+                    View all →
+                  </button>
+                </div>
+                {postedRequests.slice(0, 3).map((req) => (
+                  <div
+                    key={req.id}
+                    className="card"
+                    style={{
+                      padding: "1rem",
+                      marginBottom: "0.5rem",
                       display: "flex",
                       justifyContent: "space-between",
                       alignItems: "center",
-                      padding: "0.75rem",
-                      borderRadius: "var(--radius-md)",
-                      background: statusBg(vol.status),
                     }}
                   >
+                    <div>
+                      <div style={{ fontWeight: 600, fontSize: "0.85rem" }}>
+                        {req.title}
+                      </div>
+                      <div
+                        style={{
+                          fontSize: "0.72rem",
+                          color: "var(--text-muted)",
+                          marginTop: "0.15rem",
+                        }}
+                      >
+                        {new Date(req.deadline).toLocaleDateString("en-US", {
+                          weekday: "short",
+                          month: "short",
+                          day: "numeric",
+                        })}
+                      </div>
+                    </div>
                     <div
                       style={{
                         display: "flex",
@@ -571,91 +749,130 @@ export default function CoordinatorDashboard() {
                         gap: "0.75rem",
                       }}
                     >
-                      <div
-                        className="status-dot"
-                        style={{ background: statusColor(vol.status) }}
-                      />
-                      <div>
-                        <div style={{ fontSize: "0.85rem", fontWeight: 600 }}>
-                          {vol.name}
+                      <div style={{ textAlign: "right" }}>
+                        <div
+                          style={{
+                            fontFamily: "var(--font-display)",
+                            fontSize: "1.1rem",
+                            fontWeight: 500,
+                            color:
+                              req.people_confirmed >= req.people_needed
+                                ? "var(--accent-green)"
+                                : "var(--urgency-high)",
+                          }}
+                        >
+                          {req.people_confirmed}/{req.people_needed}
                         </div>
                         <div
                           style={{
-                            fontSize: "0.72rem",
+                            fontSize: "0.65rem",
                             color: "var(--text-muted)",
                           }}
                         >
-                          Last active {vol.last_active_days_ago} days ago —{" "}
-                          {vol.trend}
+                          confirmed
                         </div>
                       </div>
+                      <div className="score-bar" style={{ width: "4rem" }}>
+                        <div
+                          className="score-bar-fill"
+                          style={{
+                            width: `${Math.min((req.people_confirmed / req.people_needed) * 100, 100)}%`,
+                            background:
+                              req.people_confirmed >= req.people_needed
+                                ? "var(--accent-green)"
+                                : "var(--urgency-high)",
+                          }}
+                        />
+                      </div>
                     </div>
-                    <button
-                      className="btn btn-outline"
-                      style={{ fontSize: "0.72rem", padding: "6px 12px" }}
-                    >
-                      Send Check-in
-                    </button>
                   </div>
                 ))}
               </div>
-            </div>
+            )}
 
-            <div className="card" style={{ padding: "1.5rem" }}>
-              <h3
-                style={{
-                  fontFamily: "var(--font-display)",
-                  fontWeight: 500,
-                  marginBottom: "1rem",
-                }}
-              >
-                Knowledge Coverage
-              </h3>
-              <div
-                style={{
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: "0.75rem",
-                }}
-              >
-                {[
-                  { role: "Meal Delivery Coordinator", done: true },
-                  { role: "Saturday Kitchen Lead", done: false },
-                  { role: "Event Setup Volunteer", done: true },
-                  { role: "Weekend Sorting Lead", done: false },
-                ].map((r) => (
-                  <div
-                    key={r.role}
-                    style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      alignItems: "center",
-                    }}
-                  >
-                    <span style={{ fontSize: "0.85rem" }}>{r.role}</span>
-                    <span
-                      className="tag"
-                      style={
-                        r.done
-                          ? {}
-                          : {
-                              background: "rgba(201,103,62,0.12)",
-                              color: "var(--urgency-high)",
-                              border: "1px solid rgba(201,103,62,0.2)",
-                            }
-                      }
+            {/* Suggested check-ins */}
+            {(atRiskVols.length > 0 || coolingVols.length > 0) && (
+              <div className="card" style={{ padding: "1.5rem" }}>
+                <h3
+                  style={{
+                    fontFamily: "var(--font-display)",
+                    fontWeight: 500,
+                    fontSize: "1.05rem",
+                    marginBottom: "0.5rem",
+                  }}
+                >
+                  Suggested check-ins
+                </h3>
+                <p
+                  style={{
+                    fontSize: "0.8rem",
+                    color: "var(--text-muted)",
+                    marginBottom: "1rem",
+                  }}
+                >
+                  These volunteers may need a personal message to stay engaged.
+                </p>
+                <div
+                  style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "0.5rem",
+                  }}
+                >
+                  {[...atRiskVols, ...coolingVols].map((vol) => (
+                    <div
+                      key={vol.name}
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        padding: "0.75rem",
+                        borderRadius: "var(--radius-md)",
+                        background: statusBg(vol.status),
+                      }}
                     >
-                      {r.done ? "Handoff complete" : "No handoff yet"}
-                    </span>
-                  </div>
-                ))}
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "0.75rem",
+                        }}
+                      >
+                        <div
+                          className="status-dot"
+                          style={{ background: statusColor(vol.status) }}
+                        />
+                        <div>
+                          <div style={{ fontSize: "0.85rem", fontWeight: 600 }}>
+                            {vol.name}
+                          </div>
+                          <div
+                            style={{
+                              fontSize: "0.72rem",
+                              color: "var(--text-muted)",
+                            }}
+                          >
+                            Last active {vol.last_active_days_ago} days ago ·{" "}
+                            {vol.trend}
+                          </div>
+                        </div>
+                      </div>
+                      <button
+                        className="btn btn-outline"
+                        style={{ fontSize: "0.72rem", padding: "6px 12px" }}
+                      >
+                        Send Check-in
+                      </button>
+                    </div>
+                  ))}
+                </div>
               </div>
-            </div>
+            )}
           </div>
         )}
 
-        {/* ── CRISIS REQUESTS ── */}
-        {activeTab === "urgent" && (
+        {/* ── REQUESTS ── */}
+        {activeTab === "requests" && (
           <div>
             <div
               style={{
@@ -672,31 +889,60 @@ export default function CoordinatorDashboard() {
                   fontWeight: 500,
                 }}
               >
-                Crisis Requests
+                Your Requests
               </h2>
-              <button
-                onClick={() => setShowUrgentForm(!showUrgentForm)}
-                className="btn btn-urgent"
-                style={{ fontSize: "0.8rem", padding: "8px 16px" }}
-              >
-                + New Request
-              </button>
+              <div style={{ display: "flex", gap: "0.5rem" }}>
+                <button
+                  onClick={() => {
+                    setShowGeneralForm(!showGeneralForm);
+                    setShowUrgentForm(false);
+                  }}
+                  className="btn btn-outline"
+                  style={{ fontSize: "0.8rem", padding: "8px 16px" }}
+                >
+                  + General
+                </button>
+                <button
+                  onClick={() => {
+                    setShowUrgentForm(!showUrgentForm);
+                    setShowGeneralForm(false);
+                  }}
+                  className="btn btn-urgent"
+                  style={{ fontSize: "0.8rem", padding: "8px 16px" }}
+                >
+                  + Urgent
+                </button>
+              </div>
             </div>
 
+            {/* Urgent request form */}
             {showUrgentForm && (
               <div
                 className="card animate-fade-in"
-                style={{ padding: "1.5rem", marginBottom: "1.5rem" }}
+                style={{
+                  padding: "1.5rem",
+                  marginBottom: "1.5rem",
+                  borderLeft: "4px solid var(--urgency-critical)",
+                }}
               >
                 <h3
                   style={{
                     fontFamily: "var(--font-display)",
                     fontWeight: 500,
+                    marginBottom: "0.25rem",
+                  }}
+                >
+                  Urgent Request
+                </h3>
+                <p
+                  style={{
+                    fontSize: "0.8rem",
+                    color: "var(--text-muted)",
                     marginBottom: "1rem",
                   }}
                 >
-                  Post an Urgent Request
-                </h3>
+                  This will immediately notify matched volunteers.
+                </p>
                 <form
                   onSubmit={handlePostUrgent}
                   style={{
@@ -731,7 +977,7 @@ export default function CoordinatorDashboard() {
                         })
                       }
                       style={{ ...inputStyle, resize: "vertical" }}
-                      placeholder="Tell volunteers what they'll be doing..."
+                      placeholder="What will volunteers be doing and why does it matter?"
                     />
                   </div>
                   <div
@@ -742,7 +988,7 @@ export default function CoordinatorDashboard() {
                     }}
                   >
                     <div>
-                      <label style={labelStyle}>When</label>
+                      <label style={labelStyle}>When is this needed?</label>
                       <input
                         type="datetime-local"
                         required
@@ -757,7 +1003,7 @@ export default function CoordinatorDashboard() {
                       />
                     </div>
                     <div>
-                      <label style={labelStyle}>How many people</label>
+                      <label style={labelStyle}>How many people?</label>
                       <input
                         type="number"
                         min={1}
@@ -791,7 +1037,7 @@ export default function CoordinatorDashboard() {
                           })
                         }
                         style={inputStyle}
-                        placeholder="e.g. Driving/transportation"
+                        placeholder="e.g. Driving, Cooking"
                       />
                     </div>
                     <div>
@@ -810,13 +1056,7 @@ export default function CoordinatorDashboard() {
                       />
                     </div>
                   </div>
-                  <div
-                    style={{
-                      display: "flex",
-                      gap: "0.5rem",
-                      marginTop: "0.5rem",
-                    }}
-                  >
+                  <div style={{ display: "flex", gap: "0.5rem" }}>
                     <button
                       type="submit"
                       disabled={submitting}
@@ -836,6 +1076,134 @@ export default function CoordinatorDashboard() {
               </div>
             )}
 
+            {/* General request form */}
+            {showGeneralForm && (
+              <div
+                className="card animate-fade-in"
+                style={{
+                  padding: "1.5rem",
+                  marginBottom: "1.5rem",
+                  borderLeft: "4px solid var(--accent-green)",
+                }}
+              >
+                <h3
+                  style={{
+                    fontFamily: "var(--font-display)",
+                    fontWeight: 500,
+                    marginBottom: "0.25rem",
+                  }}
+                >
+                  General Request
+                </h3>
+                <p
+                  style={{
+                    fontSize: "0.8rem",
+                    color: "var(--text-muted)",
+                    marginBottom: "1rem",
+                  }}
+                >
+                  Post an ongoing volunteer opportunity. Volunteers will find it
+                  when browsing.
+                </p>
+                <form
+                  onSubmit={handlePostGeneral}
+                  style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "1rem",
+                  }}
+                >
+                  <div>
+                    <label style={labelStyle}>Role title</label>
+                    <input
+                      type="text"
+                      required
+                      value={generalForm.title}
+                      onChange={(e) =>
+                        setGeneralForm({
+                          ...generalForm,
+                          title: e.target.value,
+                        })
+                      }
+                      style={inputStyle}
+                      placeholder="e.g. Weekend kitchen helper"
+                    />
+                  </div>
+                  <div>
+                    <label style={labelStyle}>Description</label>
+                    <textarea
+                      rows={3}
+                      required
+                      value={generalForm.description}
+                      onChange={(e) =>
+                        setGeneralForm({
+                          ...generalForm,
+                          description: e.target.value,
+                        })
+                      }
+                      style={{ ...inputStyle, resize: "vertical" }}
+                      placeholder="What does this role involve?"
+                    />
+                  </div>
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "1fr 1fr",
+                      gap: "1rem",
+                    }}
+                  >
+                    <div>
+                      <label style={labelStyle}>How many people?</label>
+                      <input
+                        type="number"
+                        min={1}
+                        value={generalForm.people_needed}
+                        onChange={(e) =>
+                          setGeneralForm({
+                            ...generalForm,
+                            people_needed: parseInt(e.target.value),
+                          })
+                        }
+                        style={inputStyle}
+                      />
+                    </div>
+                    <div>
+                      <label style={labelStyle}>Skills needed</label>
+                      <input
+                        type="text"
+                        value={generalForm.skills}
+                        onChange={(e) =>
+                          setGeneralForm({
+                            ...generalForm,
+                            skills: e.target.value,
+                          })
+                        }
+                        style={inputStyle}
+                        placeholder="e.g. Cooking, Event coordination"
+                      />
+                    </div>
+                  </div>
+                  <div style={{ display: "flex", gap: "0.5rem" }}>
+                    <button
+                      type="submit"
+                      disabled={submitting}
+                      className="btn btn-primary"
+                    >
+                      {submitting ? "Posting..." : "Post Opportunity"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowGeneralForm(false)}
+                      className="btn btn-outline"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </form>
+              </div>
+            )}
+
+            {/* Posted requests list */}
             {postedRequests.map((req) => (
               <div
                 key={req.id}
@@ -959,21 +1327,30 @@ export default function CoordinatorDashboard() {
               </div>
             ))}
 
-            {postedRequests.length === 0 && !showUrgentForm && (
-              <div
-                className="card"
-                style={{ padding: "3rem", textAlign: "center" }}
-              >
-                <p style={{ color: "var(--text-muted)" }}>
-                  No crisis requests posted yet. Click &quot;+ New Request&quot;
-                  to mobilize volunteers.
-                </p>
-              </div>
-            )}
+            {postedRequests.length === 0 &&
+              !showUrgentForm &&
+              !showGeneralForm && (
+                <div
+                  className="card"
+                  style={{ padding: "3rem", textAlign: "center" }}
+                >
+                  <p
+                    style={{ color: "var(--text-muted)", marginBottom: "1rem" }}
+                  >
+                    No requests posted yet.
+                  </p>
+                  <p
+                    style={{ fontSize: "0.85rem", color: "var(--text-muted)" }}
+                  >
+                    Use the buttons above to ask for help — urgent requests
+                    notify volunteers instantly.
+                  </p>
+                </div>
+              )}
           </div>
         )}
 
-        {/* ── MY VOLUNTEERS ── */}
+        {/* ── VOLUNTEERS ── */}
         {activeTab === "volunteers" && (
           <div>
             <h2
@@ -984,7 +1361,7 @@ export default function CoordinatorDashboard() {
                 marginBottom: "0.25rem",
               }}
             >
-              My Volunteers
+              Your Volunteers
             </h2>
             <p
               style={{
@@ -993,8 +1370,62 @@ export default function CoordinatorDashboard() {
                 marginBottom: "1.5rem",
               }}
             >
-              Green = active, yellow = cooling off, red = at risk of leaving.
+              We track engagement patterns to help you keep your team.{" "}
+              <span
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "4px",
+                }}
+              >
+                <span
+                  className="status-dot"
+                  style={{
+                    background: "var(--status-active)",
+                    width: 7,
+                    height: 7,
+                  }}
+                />{" "}
+                Active
+              </span>{" "}
+              ·{" "}
+              <span
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "4px",
+                }}
+              >
+                <span
+                  className="status-dot"
+                  style={{
+                    background: "var(--status-cooling)",
+                    width: 7,
+                    height: 7,
+                  }}
+                />{" "}
+                Cooling off
+              </span>{" "}
+              ·{" "}
+              <span
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "4px",
+                }}
+              >
+                <span
+                  className="status-dot"
+                  style={{
+                    background: "var(--status-at-risk)",
+                    width: 7,
+                    height: 7,
+                  }}
+                />{" "}
+                At risk
+              </span>
             </p>
+
             {volunteers
               .sort(
                 (a, b) =>
@@ -1011,8 +1442,6 @@ export default function CoordinatorDashboard() {
               ))}
           </div>
         )}
-
-        {/* ── KNOWLEDGE BASE ── */}
         {activeTab === "handoffs" && (
           <div>
             <h2
@@ -1032,7 +1461,9 @@ export default function CoordinatorDashboard() {
                 marginBottom: "1.5rem",
               }}
             >
-              When volunteers leave, their knowledge stays.
+              When a volunteer leaves, their experience doesn&apos;t have to
+              leave with them. Handoff documents capture what they learned so
+              the next person can hit the ground running.
             </p>
 
             <div
@@ -1052,7 +1483,7 @@ export default function CoordinatorDashboard() {
                 >
                   Meal Delivery — East Van Route
                 </h3>
-                <span className="tag tag-skill">Complete</span>
+                <span className="tag tag-skill">Documented</span>
               </div>
               <div
                 style={{
@@ -1091,7 +1522,67 @@ export default function CoordinatorDashboard() {
                   color: "var(--text-muted)",
                 }}
               >
-                Left by: Previous volunteer · 3 weeks ago
+                Written by: Previous volunteer · 3 weeks ago
+              </div>
+            </div>
+
+            <div
+              className="card"
+              style={{ padding: "1.5rem", marginBottom: "1rem" }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  marginBottom: "0.75rem",
+                }}
+              >
+                <h3
+                  style={{ fontFamily: "var(--font-display)", fontWeight: 500 }}
+                >
+                  Event Setup Coordinator
+                </h3>
+                <span className="tag tag-skill">Documented</span>
+              </div>
+              <div
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "0.4rem",
+                  fontSize: "0.85rem",
+                  color: "var(--text-secondary)",
+                }}
+              >
+                <div>
+                  <strong style={{ color: "var(--text-primary)" }}>
+                    Key contacts:
+                  </strong>{" "}
+                  Priya (venue liaison), building manager Sam (604-555-0142)
+                </div>
+                <div>
+                  <strong style={{ color: "var(--text-primary)" }}>
+                    Tasks:
+                  </strong>{" "}
+                  Arrive 2hrs early, unlock storage room B, set up 12 tables +
+                  48 chairs, test AV
+                </div>
+                <div>
+                  <strong style={{ color: "var(--text-primary)" }}>
+                    Tips:
+                  </strong>{" "}
+                  Projector remote is in the top drawer, not the AV cabinet.
+                  Always bring extension cords — venue never has enough.
+                </div>
+              </div>
+              <div
+                style={{
+                  marginTop: "0.6rem",
+                  fontSize: "0.72rem",
+                  color: "var(--text-muted)",
+                }}
+              >
+                Written by: Elena Andersen · 1 week ago
               </div>
             </div>
 
@@ -1123,18 +1614,25 @@ export default function CoordinatorDashboard() {
                     border: "1px solid rgba(201,103,62,0.2)",
                   }}
                 >
-                  Missing
+                  Not yet documented
                 </span>
               </div>
-              <p style={{ fontSize: "0.85rem", color: "var(--text-muted)" }}>
-                No handoff documentation yet. The current volunteer (Ben Dubois)
-                has been flagged as at-risk.
+              <p
+                style={{
+                  fontSize: "0.85rem",
+                  color: "var(--text-muted)",
+                  marginBottom: "0.75rem",
+                }}
+              >
+                Ben Dubois has been in this role for 6 months but is flagged as
+                at-risk. If he leaves without documenting, the next volunteer
+                starts from scratch.
               </p>
               <button
                 className="btn btn-outline"
-                style={{ marginTop: "0.75rem", fontSize: "0.8rem" }}
+                style={{ fontSize: "0.8rem" }}
               >
-                Request Handoff from Ben
+                Ask Ben to document this role
               </button>
             </div>
           </div>
@@ -1185,7 +1683,7 @@ function VolRow({
             </div>
             <div style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>
               {vol.total_hours} hrs · {vol.total_shifts} shifts ·{" "}
-              {vol.crisis_responses} crisis
+              {vol.crisis_responses} crisis responses
             </div>
           </div>
         </div>
