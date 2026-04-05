@@ -4,10 +4,9 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 import { Org, UrgentRequest } from "@/lib/types";
-import {
-  DEMO_VOLUNTEER_SUMMARIES,
-  DemoVolunteerSummary,
-} from "@/lib/demo-data";
+import { DemoVolunteerSummary } from "@/lib/demo-data";
+import { extractFeatures, predictChurn } from "@/lib/churn";
+import { EngagementLog } from "@/lib/types";
 
 type Tab = "overview" | "requests" | "volunteers" | "handoffs";
 
@@ -37,7 +36,8 @@ export default function CoordinatorDashboard() {
   });
   const [orgsLoading, setOrgsLoading] = useState(true);
 
-  const volunteers = DEMO_VOLUNTEER_SUMMARIES;
+  const [volunteers, setVolunteers] = useState<DemoVolunteerSummary[]>([]);
+  const [volunteersLoading, setVolunteersLoading] = useState(true);
   const activeVols = volunteers.filter((v) => v.status === "active");
   const coolingVols = volunteers.filter((v) => v.status === "cooling");
   const atRiskVols = volunteers.filter((v) => v.status === "at-risk");
@@ -97,6 +97,79 @@ export default function CoordinatorDashboard() {
     };
   }, [org]);
 
+  // Fetch engagement logs and compute churn predictions
+  useEffect(() => {
+    if (!org) return;
+    async function computeChurn() {
+      setVolunteersLoading(true);
+
+      // Get all engagement logs
+      const { data: logs } = await supabase.from("engagement_logs").select("*");
+      // Get all volunteers who have logs
+      const { data: volData } = await supabase
+        .from("volunteers")
+        .select("id, name");
+
+      if (!logs || !volData) {
+        setVolunteersLoading(false);
+        return;
+      }
+
+      const typedLogs = logs as EngagementLog[];
+
+      // Group logs by volunteer
+      const logsByVol: Record<string, EngagementLog[]> = {};
+      typedLogs.forEach((log) => {
+        if (!logsByVol[log.volunteer_id]) logsByVol[log.volunteer_id] = [];
+        logsByVol[log.volunteer_id].push(log);
+      });
+
+      // Run churn prediction on each volunteer with logs
+      const results: DemoVolunteerSummary[] = [];
+      for (const vol of volData) {
+        const volLogs = logsByVol[vol.id];
+        if (!volLogs || volLogs.length === 0) continue;
+
+        const features = extractFeatures(volLogs);
+        const prediction = predictChurn(features);
+
+        const sorted = [...volLogs].sort(
+          (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime(),
+        );
+        const totalHrs = volLogs.reduce((s, l) => s + Number(l.hours), 0);
+        const crisisCount = volLogs.filter(
+          (l) => l.type === "crisis-response",
+        ).length;
+
+        results.push({
+          name: vol.name,
+          status:
+            prediction.risk === "high"
+              ? "at-risk"
+              : prediction.risk === "medium"
+                ? "cooling"
+                : "active",
+          last_active_days_ago: features.days_since_last_active,
+          total_hours: totalHrs,
+          total_shifts: volLogs.length,
+          crisis_responses: crisisCount,
+          streak: features.total_shifts_last_30_days,
+          trend:
+            features.hours_trend === "declining"
+              ? "Hours declining from previous month"
+              : features.hours_trend === "increasing"
+                ? "Hours increasing month over month"
+                : "Steady engagement",
+          suggested_action: prediction.suggested_action,
+        });
+      }
+
+      setVolunteers(results);
+      setVolunteersLoading(false);
+    }
+    computeChurn();
+  }, [org]);
+
   const filteredOrgs =
     claimSearch.length > 1
       ? allOrgs.filter((o) =>
@@ -133,7 +206,6 @@ export default function CoordinatorDashboard() {
       })
       .select();
     if (!error && data) {
-      setPostedRequests((prev) => [data[0] as UrgentRequest, ...prev]);
       setShowUrgentForm(false);
       setUrgentForm({
         title: "",
@@ -772,18 +844,62 @@ export default function CoordinatorDashboard() {
                           confirmed
                         </div>
                       </div>
-                      <div className="score-bar" style={{ width: "4rem" }}>
+                      <div
+                        style={{
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "center",
+                          marginBottom: "0.5rem",
+                        }}
+                      >
                         <div
-                          className="score-bar-fill"
-                          style={{
-                            width: `${Math.min((req.people_confirmed / req.people_needed) * 100, 100)}%`,
-                            background:
-                              req.people_confirmed >= req.people_needed
-                                ? "var(--accent-green)"
-                                : "var(--urgency-high)",
+                          className="score-bar"
+                          style={{ flex: 1, marginRight: "1rem" }}
+                        >
+                          <div
+                            className="score-bar-fill"
+                            style={{
+                              width: `${Math.min((req.people_confirmed / req.people_needed) * 100, 100)}%`,
+                              background:
+                                req.people_confirmed >= req.people_needed
+                                  ? "var(--accent-green)"
+                                  : "var(--urgency-high)",
+                            }}
+                          />
+                        </div>
+                        <button
+                          onClick={async () => {
+                            await supabase
+                              .from("urgent_requests")
+                              .delete()
+                              .eq("id", req.id);
+                            setPostedRequests((prev) =>
+                              prev.filter((r) => r.id !== req.id),
+                            );
                           }}
-                        />
+                          style={{
+                            fontSize: "0.72rem",
+                            color: "var(--text-muted)",
+                            background: "none",
+                            border: "none",
+                            cursor: "pointer",
+                            fontFamily: "var(--font-body)",
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          Cancel request
+                        </button>
                       </div>
+                      <div
+                        className="score-bar-fill"
+                        style={{
+                          width: `${Math.min((req.people_confirmed / req.people_needed) * 100, 100)}%`,
+                          background:
+                            req.people_confirmed >= req.people_needed
+                              ? "var(--accent-green)"
+                              : "var(--urgency-high)",
+                        }}
+                      />
                     </div>
                   </div>
                 ))}
@@ -1011,7 +1127,7 @@ export default function CoordinatorDashboard() {
                         onChange={(e) =>
                           setUrgentForm({
                             ...urgentForm,
-                            people_needed: parseInt(e.target.value),
+                            people_needed: parseInt(e.target.value) || 1,
                           })
                         }
                         style={inputStyle}
@@ -1161,7 +1277,7 @@ export default function CoordinatorDashboard() {
                         onChange={(e) =>
                           setGeneralForm({
                             ...generalForm,
-                            people_needed: parseInt(e.target.value),
+                            people_needed: parseInt(e.target.value) || 1,
                           })
                         }
                         style={inputStyle}
@@ -1314,15 +1430,47 @@ export default function CoordinatorDashboard() {
                 </div>
                 <div className="score-bar">
                   <div
-                    className="score-bar-fill"
                     style={{
-                      width: `${Math.min((req.people_confirmed / req.people_needed) * 100, 100)}%`,
-                      background:
-                        req.people_confirmed >= req.people_needed
-                          ? "var(--accent-green)"
-                          : "var(--urgency-high)",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "1rem",
                     }}
-                  />
+                  >
+                    <div className="score-bar" style={{ flex: 1 }}>
+                      <div
+                        className="score-bar-fill"
+                        style={{
+                          width: `${Math.min((req.people_confirmed / req.people_needed) * 100, 100)}%`,
+                          background:
+                            req.people_confirmed >= req.people_needed
+                              ? "var(--accent-green)"
+                              : "var(--urgency-high)",
+                        }}
+                      />
+                    </div>
+                    <button
+                      onClick={async () => {
+                        await supabase
+                          .from("urgent_requests")
+                          .delete()
+                          .eq("id", req.id);
+                        setPostedRequests((prev) =>
+                          prev.filter((r) => r.id !== req.id),
+                        );
+                      }}
+                      style={{
+                        fontSize: "0.75rem",
+                        color: "var(--text-muted)",
+                        background: "none",
+                        border: "none",
+                        cursor: "pointer",
+                        fontFamily: "var(--font-body)",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      Cancel request
+                    </button>
+                  </div>
                 </div>
               </div>
             ))}
