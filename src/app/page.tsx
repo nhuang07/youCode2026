@@ -235,12 +235,7 @@ export default function Home() {
               gap: "1.75rem",
             }}
           >
-            <div
-              className="urgency-badge urgency-critical animate-fade-up"
-              style={{ width: "fit-content", animationDelay: "0.05s" }}
-            >
-              4 organizations need help today
-            </div>
+          
 
             <h1
               className="animate-fade-up"
