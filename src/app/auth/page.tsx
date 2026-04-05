@@ -194,7 +194,7 @@ function AuthSidebar({ role, isLogin, step }: { role: UserRole; isLogin: boolean
       display: "flex",
       flexDirection: "column",
       justifyContent: "space-between",
-      padding: "3rem 2.5rem",
+      padding: "1.5rem 2.5rem 3rem",
       background: "var(--bg-secondary)",
       borderRight: "1px solid var(--border-light)",
       minHeight: "100%",
@@ -203,7 +203,7 @@ function AuthSidebar({ role, isLogin, step }: { role: UserRole; isLogin: boolean
       <Link href="/" style={{ textDecoration: "none" }}>
         <div style={{
           fontFamily: "var(--font-display)",
-          fontSize: "1.75rem",
+          fontSize: "2rem",
           fontWeight: 500,
           letterSpacing: "-0.02em",
           color: "var(--text-primary)",
