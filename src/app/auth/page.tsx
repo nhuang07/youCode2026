@@ -24,218 +24,312 @@ interface VolunteerSurveyState {
 }
 
 const NEIGHBOURHOODS = [
-  "Downtown",
-  "Dunbar-Southlands",
-  "Fairview",
-  "Grandview-Woodland",
-  "Hastings-Sunrise",
-  "Kensington-Cedar Cottage",
-  "Kerrisdale",
-  "Kitsilano",
-  "Marpole",
-  "Mount Pleasant",
-  "Oakridge",
-  "Point Grey",
-  "Renfrew-Collingwood",
-  "Riley Park",
-  "Shaughnessy",
-  "South Cambie",
-  "Strathcona",
-  "Sunset",
-  "Victoria-Fraserview",
-  "West End",
+  "Downtown","Dunbar-Southlands","Fairview","Grandview-Woodland","Hastings-Sunrise",
+  "Kensington-Cedar Cottage","Kerrisdale","Kitsilano","Marpole","Mount Pleasant",
+  "Oakridge","Point Grey","Renfrew-Collingwood","Riley Park","Shaughnessy",
+  "South Cambie","Strathcona","Sunset","Victoria-Fraserview","West End",
 ];
-
 const LANGUAGES = [
-  "English",
-  "Arabic",
-  "Cantonese",
-  "Farsi",
-  "French",
-  "Hindi",
-  "Korean",
-  "Mandarin",
-  "Punjabi",
-  "Somali",
-  "Spanish",
-  "Tagalog",
-  "Tigrinya",
-  "Vietnamese",
+  "English","Arabic","Cantonese","Farsi","French","Hindi","Korean","Mandarin",
+  "Punjabi","Somali","Spanish","Tagalog","Tigrinya","Vietnamese",
 ];
-
 const SKILLS = [
-  "Accounting/bookkeeping",
-  "Administrative support",
-  "Arts facilitation",
-  "Childcare support",
-  "Cooking/food prep",
-  "Data entry",
-  "Driving/transportation",
-  "Elder care",
-  "Event coordination",
-  "First aid/CPR",
-  "Fundraising",
-  "Grant writing",
-  "Graphic design",
-  "IT support",
-  "Legal knowledge",
-  "Mental health support",
-  "Outreach/community engagement",
-  "Photography",
-  "Public speaking",
-  "Research",
-  "Social media",
-  "Teaching/training",
-  "Translation/interpretation",
-  "Tutoring/mentorship",
+  "Accounting/bookkeeping","Administrative support","Arts facilitation","Childcare support",
+  "Cooking/food prep","Data entry","Driving/transportation","Elder care","Event coordination",
+  "First aid/CPR","Fundraising","Grant writing","Graphic design","IT support","Legal knowledge",
+  "Mental health support","Outreach/community engagement","Photography","Public speaking",
+  "Research","Social media","Teaching/training","Translation/interpretation","Tutoring/mentorship",
 ];
-
 const CAUSE_AREAS = [
-  "Animal welfare",
-  "Anti-poverty",
-  "Arts & culture",
-  "Disability services",
-  "Education & literacy",
-  "Environment",
-  "Food security",
-  "Housing & homelessness",
-  "Indigenous community support",
-  "Legal aid",
-  "Mental health",
-  "Newcomer & immigrant support",
-  "Senior services",
-  "Women & gender equity",
-  "Youth services",
+  "Animal welfare","Anti-poverty","Arts & culture","Disability services","Education & literacy",
+  "Environment","Food security","Housing & homelessness","Indigenous community support",
+  "Legal aid","Mental health","Newcomer & immigrant support","Senior services",
+  "Women & gender equity","Youth services",
 ];
-
 const AVAILABILITY_OPTIONS = [
-  "Flexible / as needed",
-  "Weekdays only",
-  "Weekday mornings",
-  "Weekday afternoons",
-  "Weekday evenings",
-  "Weekends only",
-  "Weekend mornings",
-  "Weekend afternoons",
-  "Evenings only",
+  "Flexible / as needed","Weekdays only","Weekday mornings","Weekday afternoons",
+  "Weekday evenings","Weekends only","Weekend mornings","Weekend afternoons","Evenings only",
 ];
-
-const EXPERIENCE_OPTIONS = [
-  "None",
-  "Some (1-2 orgs)",
-  "Experienced (3+ orgs)",
-];
-
-const BACKGROUND_CHECK_OPTIONS: BackgroundCheckStatus[] = [
-  "Completed",
-  "In progress",
-  "Not yet",
-];
+const EXPERIENCE_OPTIONS = ["None","Some (1–2 orgs)","Experienced (3+ orgs)"];
+const BACKGROUND_CHECK_OPTIONS: BackgroundCheckStatus[] = ["Completed","In progress","Not yet"];
 
 const initialSurveyState: VolunteerSurveyState = {
-  firstName: "",
-  lastName: "",
-  age: "",
-  neighbourhood: "",
-  languages: ["English"],
-  skills: [],
-  interests: [],
-  availability: "",
-  hoursPerMonth: "",
-  priorExperience: "",
-  hasVehicle: null,
-  backgroundCheckStatus: "",
+  firstName: "", lastName: "", age: "", neighbourhood: "",
+  languages: ["English"], skills: [], interests: [],
+  availability: "", hoursPerMonth: "", priorExperience: "",
+  hasVehicle: null, backgroundCheckStatus: "",
 };
 
 function toggleMultiValue(values: string[], value: string) {
-  return values.includes(value)
-    ? values.filter((item) => item !== value)
-    : [...values, value];
+  return values.includes(value) ? values.filter((i) => i !== value) : [...values, value];
 }
 
+// ── Shared style tokens ────────────────────────────────────────────
+const inputStyle: React.CSSProperties = {
+  width: "100%",
+  padding: "11px 15px",
+  borderRadius: "10px",
+  border: "1.5px solid var(--border-light)",
+  background: "var(--bg-primary)",
+  fontSize: "0.875rem",
+  color: "var(--text-primary)",
+  outline: "none",
+  transition: "border-color 0.2s",
+  fontFamily: "inherit",
+};
+
+const labelStyle: React.CSSProperties = {
+  display: "block",
+  fontSize: "0.68rem",
+  fontWeight: 600,
+  letterSpacing: "0.09em",
+  textTransform: "uppercase" as const,
+  color: "var(--text-muted)",
+  marginBottom: "7px",
+};
+
+const sectionHeadStyle: React.CSSProperties = {
+  fontFamily: "var(--font-display)",
+  fontSize: "1.05rem",
+  fontWeight: 500,
+  letterSpacing: "-0.01em",
+  color: "var(--text-primary)",
+  marginBottom: "1rem",
+  paddingBottom: "0.6rem",
+  borderBottom: "1px solid var(--border-light)",
+};
+
+// ── Chip / tag button ──────────────────────────────────────────────
+function Chip({
+  label, selected, onClick,
+}: { label: string; selected: boolean; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      style={{
+        padding: "5px 13px",
+        borderRadius: "100px",
+        border: "1.5px solid",
+        borderColor: selected ? "var(--accent-green)" : "var(--border-light)",
+        background: selected ? "var(--accent-green-light)" : "var(--bg-primary)",
+        color: selected ? "var(--accent-green)" : "var(--text-secondary)",
+        fontSize: "0.78rem",
+        fontWeight: selected ? 600 : 400,
+        cursor: "pointer",
+        transition: "all 0.18s ease",
+        whiteSpace: "nowrap" as const,
+      }}
+    >
+      {label}
+    </button>
+  );
+}
+
+// ── Tile select ───────────────────────────────────────────────────
+function Tile({
+  label, selected, onClick, flex,
+}: { label: string; selected: boolean; onClick: () => void; flex?: boolean }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      style={{
+        flex: flex ? 1 : undefined,
+        padding: "10px 14px",
+        borderRadius: "10px",
+        border: "1.5px solid",
+        borderColor: selected ? "var(--accent-green)" : "var(--border-light)",
+        background: selected ? "var(--accent-green-light)" : "var(--bg-primary)",
+        color: selected ? "var(--accent-green)" : "var(--text-secondary)",
+        fontSize: "0.82rem",
+        fontWeight: selected ? 600 : 400,
+        cursor: "pointer",
+        textAlign: "left" as const,
+        transition: "all 0.18s ease",
+      }}
+    >
+      {label}
+    </button>
+  );
+}
+
+// ── Left panel — branding sidebar ─────────────────────────────────
+function AuthSidebar({ role, isLogin, step }: { role: UserRole; isLogin: boolean; step: VolunteerSignupStep }) {
+  const headlines: Record<string, { tag: string; h: string; sub: string }> = {
+    login: {
+      tag: "Welcome back",
+      h: "Good to see\nyou again.",
+      sub: "Your community is still out there — and they still need you.",
+    },
+    volunteer_account: {
+      tag: "Join as a volunteer",
+      h: "Let's find your\nperfect match.",
+      sub: "Tell us a bit about yourself and we'll connect you with an organization that fits your schedule and skills.",
+    },
+    volunteer_survey: {
+      tag: "Almost there",
+      h: "Help us\nknow you.",
+      sub: "These questions let us surface opportunities that actually fit — not just what's nearby.",
+    },
+    coordinator: {
+      tag: "Register your org",
+      h: "Your people\nare waiting.",
+      sub: "Create coordinator access to post shifts, track volunteers, and fill gaps when it matters most.",
+    },
+  };
+
+  const key = isLogin
+    ? "login"
+    : role === "coordinator"
+    ? "coordinator"
+    : step === "survey"
+    ? "volunteer_survey"
+    : "volunteer_account";
+
+  const { tag, h, sub } = headlines[key];
+
+  return (
+    <div style={{
+      display: "flex",
+      flexDirection: "column",
+      justifyContent: "space-between",
+      padding: "3rem 2.5rem",
+      background: "var(--bg-secondary)",
+      borderRight: "1px solid var(--border-light)",
+      minHeight: "100%",
+    }}>
+      {/* Logo */}
+      <Link href="/" style={{ textDecoration: "none" }}>
+        <div style={{
+          fontFamily: "var(--font-display)",
+          fontSize: "1.75rem",
+          fontWeight: 500,
+          letterSpacing: "-0.02em",
+          color: "var(--text-primary)",
+          lineHeight: 1,
+        }}>
+          match-<em style={{ color: "var(--accent-green)", fontStyle: "italic" }}>a</em>
+        </div>
+      </Link>
+
+      {/* Main copy */}
+      <div>
+        <div style={{
+          fontSize: "0.65rem",
+          fontWeight: 700,
+          letterSpacing: "0.12em",
+          textTransform: "uppercase",
+          color: "var(--accent-green)",
+          marginBottom: "1rem",
+        }}>
+          {tag}
+        </div>
+        <h2 style={{
+          fontFamily: "var(--font-display)",
+          fontSize: "clamp(2rem, 3.5vw, 2.8rem)",
+          fontWeight: 500,
+          lineHeight: 1.08,
+          letterSpacing: "-0.04em",
+          color: "var(--text-primary)",
+          whiteSpace: "pre-line",
+          marginBottom: "1.25rem",
+        }}>
+          {h}
+        </h2>
+        <p style={{
+          fontSize: "0.9rem",
+          lineHeight: 1.75,
+          color: "var(--text-secondary)",
+          maxWidth: "260px",
+        }}>
+          {sub}
+        </p>
+      </div>
+
+      {/* Step indicator (volunteer signup only) */}
+      {!isLogin && role === "volunteer" && (
+        <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+          {[
+            { s: "account", label: "Account details" },
+            { s: "survey", label: "Volunteer questionnaire" },
+          ].map(({ s, label }, i) => {
+            const done = step === "survey" && s === "account";
+            const active = step === s;
+            return (
+              <div key={s} style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+                <div style={{
+                  width: "22px", height: "22px", borderRadius: "50%",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  fontSize: "0.65rem", fontWeight: 700,
+                  background: done ? "var(--accent-green)" : active ? "var(--accent-green-light)" : "transparent",
+                  border: `1.5px solid ${done || active ? "var(--accent-green)" : "var(--border-light)"}`,
+                  color: done ? "white" : active ? "var(--accent-green)" : "var(--text-muted)",
+                  flexShrink: 0,
+                  transition: "all 0.3s",
+                }}>
+                  {done ? "✓" : i + 1}
+                </div>
+                <span style={{
+                  fontSize: "0.8rem",
+                  fontWeight: active ? 600 : 400,
+                  color: active ? "var(--text-primary)" : done ? "var(--text-secondary)" : "var(--text-muted)",
+                }}>
+                  {label}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Footer note */}
+      <div style={{ fontSize: "0.7rem", color: "var(--text-muted)", lineHeight: 1.6 }}>
+        youCode 2026 — SAP Challenge<br />
+        Strengthening BC&apos;s Nonprofit Workforce
+      </div>
+    </div>
+  );
+}
+
+// ── Main content ──────────────────────────────────────────────────
 function AuthContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const roleParam = searchParams.get("role") || "volunteer";
 
-  const [role, setRole] = useState<UserRole>(
-    roleParam === "coordinator" ? "coordinator" : "volunteer"
-  );
+  const [role, setRole] = useState<UserRole>(roleParam === "coordinator" ? "coordinator" : "volunteer");
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
   const [survey, setSurvey] = useState<VolunteerSurveyState>(initialSurveyState);
-  const [volunteerSignupStep, setVolunteerSignupStep] =
-    useState<VolunteerSignupStep>("account");
+  const [volunteerSignupStep, setVolunteerSignupStep] = useState<VolunteerSignupStep>("account");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  useEffect(() => {
-    if (roleParam === "coordinator" || roleParam === "volunteer") {
-      setRole(roleParam);
-    }
-  }, [roleParam]);
+  useEffect(() => { if (roleParam === "coordinator" || roleParam === "volunteer") setRole(roleParam); }, [roleParam]);
+  useEffect(() => { if (role === "coordinator") setSurvey(initialSurveyState); }, [role]);
+  useEffect(() => { setVolunteerSignupStep("account"); setError(""); }, [role, isLogin]);
 
-  useEffect(() => {
-    if (role === "coordinator") {
-      setSurvey(initialSurveyState);
-    }
-  }, [role]);
+  const volunteerName = `${survey.firstName} ${survey.lastName}`.trim() || name.trim();
 
-  useEffect(() => {
-    setVolunteerSignupStep("account");
-    setError("");
-  }, [role, isLogin]);
-
-  const volunteerName =
-    `${survey.firstName} ${survey.lastName}`.trim() || name.trim();
-
-  const handleVolunteerToggle = (
-    field: "languages" | "skills" | "interests",
-    value: string
-  ) => {
-    setSurvey((current) => ({
-      ...current,
-      [field]: toggleMultiValue(current[field], value),
-    }));
+  const handleVolunteerToggle = (field: "languages" | "skills" | "interests", value: string) => {
+    setSurvey((c) => ({ ...c, [field]: toggleMultiValue(c[field], value) }));
   };
 
   const validateVolunteerSurvey = () => {
-    if (!survey.firstName.trim() || !survey.lastName.trim()) {
-      return "Please enter your first and last name.";
-    }
-    if (!survey.age || Number(survey.age) < 13) {
-      return "Please enter a valid age.";
-    }
-    if (!survey.neighbourhood) {
-      return "Please choose your neighbourhood.";
-    }
-    if (survey.languages.length === 0) {
-      return "Please select at least one language.";
-    }
-    if (survey.skills.length === 0) {
-      return "Please select at least one skill.";
-    }
-    if (survey.interests.length === 0) {
-      return "Please select at least one cause area.";
-    }
-    if (!survey.availability) {
-      return "Please choose your availability.";
-    }
-    if (!survey.hoursPerMonth || Number(survey.hoursPerMonth) <= 0) {
-      return "Please enter how many hours you can contribute each month.";
-    }
-    if (!survey.priorExperience) {
-      return "Please choose your prior volunteer experience.";
-    }
-    if (survey.hasVehicle === null) {
-      return "Please tell us whether you have access to a vehicle.";
-    }
-    if (!survey.backgroundCheckStatus) {
-      return "Please choose your background check status.";
-    }
-
+    if (!survey.firstName.trim() || !survey.lastName.trim()) return "Please enter your first and last name.";
+    if (!survey.age || Number(survey.age) < 13) return "Please enter a valid age.";
+    if (!survey.neighbourhood) return "Please choose your neighbourhood.";
+    if (survey.languages.length === 0) return "Please select at least one language.";
+    if (survey.skills.length === 0) return "Please select at least one skill.";
+    if (survey.interests.length === 0) return "Please select at least one cause area.";
+    if (!survey.availability) return "Please choose your availability.";
+    if (!survey.hoursPerMonth || Number(survey.hoursPerMonth) <= 0) return "Please enter hours per month.";
+    if (!survey.priorExperience) return "Please choose your prior experience.";
+    if (survey.hasVehicle === null) return "Please tell us whether you have access to a vehicle.";
+    if (!survey.backgroundCheckStatus) return "Please choose your background check status.";
     return "";
   };
 
@@ -243,44 +337,26 @@ function AuthContent() {
     e.preventDefault();
     setLoading(true);
     setError("");
-
     try {
       if (isLogin) {
-        if (!email.trim() || !password.trim()) {
-          throw new Error("Enter any email and password to continue.");
-        }
-
+        if (!email.trim() || !password.trim()) throw new Error("Enter any email and password to continue.");
         router.push(role === "volunteer" ? "/volunteer" : "/coordinator");
         return;
       }
-
       const resolvedName = role === "volunteer" ? volunteerName : name.trim();
-
       if (role === "volunteer" && volunteerSignupStep === "account") {
-        if (!survey.firstName.trim() || !survey.lastName.trim()) {
-          throw new Error("Please enter your first and last name.");
-        }
-        if (!email.trim() || !password.trim()) {
-          throw new Error("Enter any email and password to continue.");
-        }
-
+        if (!survey.firstName.trim() || !survey.lastName.trim()) throw new Error("Please enter your first and last name.");
+        if (!email.trim() || !password.trim()) throw new Error("Enter any email and password to continue.");
         setVolunteerSignupStep("survey");
         return;
       }
-
-      if (!resolvedName) {
-        throw new Error("Please enter your name before creating an account.");
-      }
-
+      if (!resolvedName) throw new Error("Please enter your name before creating an account.");
       if (role === "volunteer") {
-        const surveyError = validateVolunteerSurvey();
-        if (surveyError) {
-          throw new Error(surveyError);
-        }
+        const err = validateVolunteerSurvey();
+        if (err) throw new Error(err);
       } else if (!email.trim() || !password.trim()) {
         throw new Error("Enter any email and password to continue.");
       }
-
       router.push(role === "volunteer" ? "/volunteer" : "/coordinator");
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Something went wrong");
@@ -289,634 +365,327 @@ function AuthContent() {
     }
   };
 
+  const showSurvey = !isLogin && role === "volunteer" && volunteerSignupStep === "survey";
+
   return (
-    <main className="min-h-screen flex items-center justify-center px-4 py-10">
-      <div className="w-full max-w-4xl">
-        <div className="text-center mb-8">
-          <Link
-            href="/"
-            className="text-3xl font-bold tracking-tight"
-            style={{ color: "var(--accent-green)" }}
-          >
-            rooted
-          </Link>
-          <p className="mt-2" style={{ color: "var(--text-secondary)" }}>
+    <div style={{
+      minHeight: "100vh",
+      display: "grid",
+      gridTemplateColumns: "340px 1fr",
+      background: "var(--bg-primary)",
+    }}>
+      {/* ── Left sidebar ── */}
+      <AuthSidebar role={role} isLogin={isLogin} step={volunteerSignupStep} />
+
+      {/* ── Right: scrollable form panel ── */}
+      <div style={{
+        overflowY: "auto",
+        minHeight: "100vh",
+        display: "flex",
+        alignItems: showSurvey ? "flex-start" : "center",
+        justifyContent: "center",
+        padding: showSurvey ? "3rem 3.5rem" : "2rem 3.5rem",
+      }}>
+      <div style={{
+        display: "flex",
+        flexDirection: "column",
+        gap: "2.5rem",
+        maxWidth: "580px",
+        width: "100%",
+      }}>
+
+        {/* Role toggle */}
+        <div style={{
+          display: "flex",
+          background: "var(--bg-secondary)",
+          border: "1px solid var(--border-light)",
+          borderRadius: "12px",
+          padding: "4px",
+          width: "fit-content",
+          gap: "2px",
+        }}>
+          {(["volunteer", "coordinator"] as UserRole[]).map((r) => (
+            <button
+              key={r}
+              type="button"
+              onClick={() => setRole(r)}
+              style={{
+                padding: "8px 20px",
+                borderRadius: "9px",
+                border: "none",
+                background: role === r ? "var(--bg-card)" : "transparent",
+                color: role === r ? "var(--accent-green)" : "var(--text-muted)",
+                fontSize: "0.82rem",
+                fontWeight: role === r ? 600 : 400,
+                cursor: "pointer",
+                boxShadow: role === r ? "var(--shadow-sm)" : "none",
+                transition: "all 0.2s",
+              }}
+            >
+              {r === "volunteer" ? "I'm a Volunteer" : "I run an org"}
+            </button>
+          ))}
+        </div>
+
+        {/* Page heading */}
+        <div>
+          <h1 style={{
+            fontFamily: "var(--font-display)",
+            fontSize: "clamp(1.8rem, 3vw, 2.5rem)",
+            fontWeight: 500,
+            lineHeight: 1.08,
+            letterSpacing: "-0.035em",
+            color: "var(--text-primary)",
+            marginBottom: "0.5rem",
+          }}>
             {isLogin
-              ? "Welcome back"
+              ? "Welcome back."
+              : showSurvey
+              ? "Tell us about yourself."
               : role === "volunteer"
-                ? volunteerSignupStep === "account"
-                  ? "Start your volunteer signup"
-                  : "Create your volunteer profile"
-                : "Join as an organization coordinator"}
+              ? "Create your profile."
+              : "Register your organization."}
+          </h1>
+          <p style={{ fontSize: "0.875rem", color: "var(--text-secondary)", lineHeight: 1.6 }}>
+            {isLogin
+              ? "Use any email and password for the demo."
+              : showSurvey
+              ? "A few quick questions to personalize your matches."
+              : "Any email and password will take you straight to the demo."}
           </p>
         </div>
 
-        <div
-          className="flex rounded-xl p-1 mb-6 max-w-md mx-auto"
-          style={{ background: "var(--bg-secondary)" }}
-        >
-          <button
-            type="button"
-            onClick={() => setRole("volunteer")}
-            className="flex-1 py-2.5 rounded-lg text-sm font-semibold transition-all"
-            style={{
-              background:
-                role === "volunteer" ? "var(--bg-card)" : "transparent",
-              color:
-                role === "volunteer"
-                  ? "var(--accent-green)"
-                  : "var(--text-muted)",
-              boxShadow: role === "volunteer" ? "var(--shadow-sm)" : "none",
-            }}
-          >
-            I&apos;m a Volunteer
-          </button>
-          <button
-            type="button"
-            onClick={() => setRole("coordinator")}
-            className="flex-1 py-2.5 rounded-lg text-sm font-semibold transition-all"
-            style={{
-              background:
-                role === "coordinator" ? "var(--bg-card)" : "transparent",
-              color:
-                role === "coordinator"
-                  ? "var(--accent-green)"
-                  : "var(--text-muted)",
-              boxShadow: role === "coordinator" ? "var(--shadow-sm)" : "none",
-            }}
-          >
-            I&apos;m a Coordinator
-          </button>
-        </div>
+        <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: "2.5rem" }}>
 
-        <div className="card p-8">
-          <form onSubmit={handleSubmit} className="space-y-8">
-            <section className="space-y-4">
-              <div className="flex items-center justify-between">
-                <h2 className="text-lg font-bold">
-                  {isLogin
-                    ? "Sign in"
-                    : role === "volunteer" && volunteerSignupStep === "survey"
-                      ? "Volunteer questionnaire"
-                      : "Account details"}
-                </h2>
-                {!isLogin &&
-                  role === "volunteer" &&
-                  volunteerSignupStep === "survey" && (
-                  <span className="tag tag-language">Dataset-shaped survey</span>
-                )}
-              </div>
+          {/* ── Account fields ── */}
+          {!showSurvey && (
+            <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
+              <div style={sectionHeadStyle}>Account details</div>
+
+              {!isLogin && role === "volunteer" && (
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
+                  <div>
+                    <label style={labelStyle}>First name</label>
+                    <input style={inputStyle} type="text" placeholder="Grace"
+                      value={survey.firstName}
+                      onChange={(e) => setSurvey((c) => ({ ...c, firstName: e.target.value }))} />
+                  </div>
+                  <div>
+                    <label style={labelStyle}>Last name</label>
+                    <input style={inputStyle} type="text" placeholder="Johansson"
+                      value={survey.lastName}
+                      onChange={(e) => setSurvey((c) => ({ ...c, lastName: e.target.value }))} />
+                  </div>
+                </div>
+              )}
 
               {!isLogin && role === "coordinator" && (
                 <div>
-                  <label
-                    className="block text-sm font-medium mb-1.5"
-                    style={{ color: "var(--text-secondary)" }}
-                  >
-                    Full Name
-                  </label>
-                  <input
-                    type="text"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    required
-                    className="w-full px-4 py-2.5 rounded-lg text-sm outline-none transition-all"
-                    style={{
-                      border: "1.5px solid var(--border-light)",
-                      background: "var(--bg-primary)",
-                    }}
-                    placeholder="Your name"
-                  />
+                  <label style={labelStyle}>Full name</label>
+                  <input style={inputStyle} type="text" placeholder="Your name"
+                    value={name} onChange={(e) => setName(e.target.value)} />
                 </div>
               )}
 
-              {!isLogin &&
-                role === "volunteer" &&
-                volunteerSignupStep === "account" && (
-                <div className="grid md:grid-cols-2 gap-4">
-                  <div>
-                    <label
-                      className="block text-sm font-medium mb-1.5"
-                      style={{ color: "var(--text-secondary)" }}
-                    >
-                      First Name
-                    </label>
-                    <input
-                      type="text"
-                      value={survey.firstName}
-                      onChange={(e) =>
-                        setSurvey((current) => ({
-                          ...current,
-                          firstName: e.target.value,
-                        }))
-                      }
-                      required
-                      className="w-full px-4 py-2.5 rounded-lg text-sm outline-none transition-all"
-                      style={{
-                        border: "1.5px solid var(--border-light)",
-                        background: "var(--bg-primary)",
-                      }}
-                      placeholder="Grace"
-                    />
-                  </div>
-                  <div>
-                    <label
-                      className="block text-sm font-medium mb-1.5"
-                      style={{ color: "var(--text-secondary)" }}
-                    >
-                      Last Name
-                    </label>
-                    <input
-                      type="text"
-                      value={survey.lastName}
-                      onChange={(e) =>
-                        setSurvey((current) => ({
-                          ...current,
-                          lastName: e.target.value,
-                        }))
-                      }
-                      required
-                      className="w-full px-4 py-2.5 rounded-lg text-sm outline-none transition-all"
-                      style={{
-                        border: "1.5px solid var(--border-light)",
-                        background: "var(--bg-primary)",
-                      }}
-                      placeholder="Johansson"
-                    />
-                  </div>
-                </div>
-              )}
-
-              <div className="grid md:grid-cols-2 gap-4">
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
                 <div>
-                  <label
-                    className="block text-sm font-medium mb-1.5"
-                    style={{ color: "var(--text-secondary)" }}
-                  >
-                    Email
-                  </label>
-                  <input
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    required
-                    className="w-full px-4 py-2.5 rounded-lg text-sm outline-none transition-all"
-                    style={{
-                      border: "1.5px solid var(--border-light)",
-                      background: "var(--bg-primary)",
-                    }}
-                    placeholder="you@example.com"
-                  />
+                  <label style={labelStyle}>Email</label>
+                  <input style={inputStyle} type="email" placeholder="you@example.com"
+                    value={email} onChange={(e) => setEmail(e.target.value)} />
                 </div>
-
                 <div>
-                  <label
-                    className="block text-sm font-medium mb-1.5"
-                    style={{ color: "var(--text-secondary)" }}
-                  >
-                    Password
-                  </label>
-                  <input
-                    type="password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    required
-                    minLength={6}
-                    className="w-full px-4 py-2.5 rounded-lg text-sm outline-none transition-all"
-                    style={{
-                      border: "1.5px solid var(--border-light)",
-                      background: "var(--bg-primary)",
-                    }}
-                    placeholder="••••••••"
-                  />
+                  <label style={labelStyle}>Password</label>
+                  <input style={inputStyle} type="password" placeholder="••••••••"
+                    value={password} onChange={(e) => setPassword(e.target.value)} />
                 </div>
-              </div>
-
-              {!isLogin &&
-                role === "volunteer" &&
-                volunteerSignupStep === "account" && (
-                  <p
-                    className="text-sm"
-                    style={{ color: "var(--text-muted)" }}
-                  >
-                    For now, signup is local-only. Any email and password will
-                    take you to the volunteer questionnaire.
-                  </p>
-                )}
-            </section>
-
-            {!isLogin &&
-              role === "volunteer" &&
-              volunteerSignupStep === "survey" && (
-              <>
-                <section className="space-y-4">
-                  <h2 className="text-lg font-bold">About you</h2>
-                  <div className="grid md:grid-cols-2 gap-4">
-                    <div>
-                      <label
-                        className="block text-sm font-medium mb-1.5"
-                        style={{ color: "var(--text-secondary)" }}
-                      >
-                        Age
-                      </label>
-                      <input
-                        type="number"
-                        min={13}
-                        value={survey.age}
-                        onChange={(e) =>
-                          setSurvey((current) => ({
-                            ...current,
-                            age: e.target.value,
-                          }))
-                        }
-                        required
-                        className="w-full px-4 py-2.5 rounded-lg text-sm outline-none transition-all"
-                        style={{
-                          border: "1.5px solid var(--border-light)",
-                          background: "var(--bg-primary)",
-                        }}
-                        placeholder="19"
-                      />
-                    </div>
-
-                    <div>
-                      <label
-                        className="block text-sm font-medium mb-1.5"
-                        style={{ color: "var(--text-secondary)" }}
-                      >
-                        Hours available per month
-                      </label>
-                      <input
-                        type="number"
-                        min={1}
-                        value={survey.hoursPerMonth}
-                        onChange={(e) =>
-                          setSurvey((current) => ({
-                            ...current,
-                            hoursPerMonth: e.target.value,
-                          }))
-                        }
-                        required
-                        className="w-full px-4 py-2.5 rounded-lg text-sm outline-none transition-all"
-                        style={{
-                          border: "1.5px solid var(--border-light)",
-                          background: "var(--bg-primary)",
-                        }}
-                        placeholder="8"
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label
-                      className="block text-sm font-medium mb-1.5"
-                      style={{ color: "var(--text-secondary)" }}
-                    >
-                      Neighbourhood
-                    </label>
-                    <select
-                      value={survey.neighbourhood}
-                      onChange={(e) =>
-                        setSurvey((current) => ({
-                          ...current,
-                          neighbourhood: e.target.value,
-                        }))
-                      }
-                      required
-                      className="w-full px-4 py-2.5 rounded-lg text-sm outline-none transition-all"
-                      style={{
-                        border: "1.5px solid var(--border-light)",
-                        background: "var(--bg-primary)",
-                      }}
-                    >
-                      <option value="">Select your neighbourhood</option>
-                      {NEIGHBOURHOODS.map((option) => (
-                        <option key={option} value={option}>
-                          {option}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </section>
-
-                <section className="space-y-4">
-                  <h2 className="text-lg font-bold">Languages & availability</h2>
-
-                  <div>
-                    <label
-                      className="block text-sm font-medium mb-2"
-                      style={{ color: "var(--text-secondary)" }}
-                    >
-                      Languages spoken
-                    </label>
-                    <div className="flex flex-wrap gap-2">
-                      {LANGUAGES.map((option) => {
-                        const selected = survey.languages.includes(option);
-
-                        return (
-                          <button
-                            key={option}
-                            type="button"
-                            onClick={() =>
-                              handleVolunteerToggle("languages", option)
-                            }
-                            className={`tag ${selected ? "tag-selected" : "tag-language"}`}
-                          >
-                            {option}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  <div>
-                    <label
-                      className="block text-sm font-medium mb-2"
-                      style={{ color: "var(--text-secondary)" }}
-                    >
-                      Availability
-                    </label>
-                    <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                      {AVAILABILITY_OPTIONS.map((option) => {
-                        const selected = survey.availability === option;
-
-                        return (
-                          <button
-                            key={option}
-                            type="button"
-                            onClick={() =>
-                              setSurvey((current) => ({
-                                ...current,
-                                availability: option,
-                              }))
-                            }
-                            className="text-left p-4 rounded-xl border transition-all"
-                            style={{
-                              borderColor: selected
-                                ? "var(--accent-green)"
-                                : "var(--border-light)",
-                              background: selected
-                                ? "var(--accent-green-light)"
-                                : "var(--bg-card)",
-                              boxShadow: selected ? "var(--shadow-sm)" : "none",
-                            }}
-                          >
-                            <span className="text-sm font-semibold">{option}</span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                </section>
-
-                <section className="space-y-4">
-                  <h2 className="text-lg font-bold">What you can help with</h2>
-
-                  <div>
-                    <label
-                      className="block text-sm font-medium mb-2"
-                      style={{ color: "var(--text-secondary)" }}
-                    >
-                      Skills
-                    </label>
-                    <div className="flex flex-wrap gap-2">
-                      {SKILLS.map((option) => {
-                        const selected = survey.skills.includes(option);
-
-                        return (
-                          <button
-                            key={option}
-                            type="button"
-                            onClick={() => handleVolunteerToggle("skills", option)}
-                            className={`tag ${selected ? "tag-selected" : "tag-skill"}`}
-                          >
-                            {option}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  <div>
-                    <label
-                      className="block text-sm font-medium mb-2"
-                      style={{ color: "var(--text-secondary)" }}
-                    >
-                      Cause areas of interest
-                    </label>
-                    <div className="flex flex-wrap gap-2">
-                      {CAUSE_AREAS.map((option) => {
-                        const selected = survey.interests.includes(option);
-
-                        return (
-                          <button
-                            key={option}
-                            type="button"
-                            onClick={() =>
-                              handleVolunteerToggle("interests", option)
-                            }
-                            className={`tag ${selected ? "tag-selected" : ""}`}
-                          >
-                            {option}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                </section>
-
-                <section className="space-y-4">
-                  <h2 className="text-lg font-bold">Experience & readiness</h2>
-
-                  <div>
-                    <label
-                      className="block text-sm font-medium mb-2"
-                      style={{ color: "var(--text-secondary)" }}
-                    >
-                      Prior volunteer experience
-                    </label>
-                    <div className="grid md:grid-cols-3 gap-3">
-                      {EXPERIENCE_OPTIONS.map((option) => {
-                        const selected = survey.priorExperience === option;
-
-                        return (
-                          <button
-                            key={option}
-                            type="button"
-                            onClick={() =>
-                              setSurvey((current) => ({
-                                ...current,
-                                priorExperience: option,
-                              }))
-                            }
-                            className="text-left p-4 rounded-xl border transition-all"
-                            style={{
-                              borderColor: selected
-                                ? "var(--accent-green)"
-                                : "var(--border-light)",
-                              background: selected
-                                ? "var(--accent-green-light)"
-                                : "var(--bg-card)",
-                            }}
-                          >
-                            <span className="text-sm font-semibold">{option}</span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  <div className="grid md:grid-cols-2 gap-4">
-                    <div>
-                      <label
-                        className="block text-sm font-medium mb-2"
-                        style={{ color: "var(--text-secondary)" }}
-                      >
-                        Do you have access to a vehicle?
-                      </label>
-                      <div className="flex gap-3">
-                        {[
-                          { label: "Yes", value: true },
-                          { label: "No", value: false },
-                        ].map((option) => {
-                          const selected = survey.hasVehicle === option.value;
-
-                          return (
-                            <button
-                              key={option.label}
-                              type="button"
-                              onClick={() =>
-                                setSurvey((current) => ({
-                                  ...current,
-                                  hasVehicle: option.value,
-                                }))
-                              }
-                              className="flex-1 p-4 rounded-xl border text-sm font-semibold transition-all"
-                              style={{
-                                borderColor: selected
-                                  ? "var(--accent-green)"
-                                  : "var(--border-light)",
-                                background: selected
-                                  ? "var(--accent-green-light)"
-                                  : "var(--bg-card)",
-                              }}
-                            >
-                              {option.label}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-
-                    <div>
-                      <label
-                        className="block text-sm font-medium mb-2"
-                        style={{ color: "var(--text-secondary)" }}
-                      >
-                        Background check status
-                      </label>
-                      <div className="flex flex-wrap gap-2">
-                        {BACKGROUND_CHECK_OPTIONS.map((option) => {
-                          const selected = survey.backgroundCheckStatus === option;
-
-                          return (
-                            <button
-                              key={option}
-                              type="button"
-                              onClick={() =>
-                                setSurvey((current) => ({
-                                  ...current,
-                                  backgroundCheckStatus: option,
-                                }))
-                              }
-                              className={`tag ${selected ? "tag-selected" : ""}`}
-                            >
-                              {option}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  </div>
-                </section>
-              </>
-            )}
-
-            {error && (
-              <div
-                className="text-sm px-4 py-2.5 rounded-lg"
-                style={{
-                  background: "var(--accent-orange-light)",
-                  color: "var(--accent-orange)",
-                }}
-              >
-                {error}
-              </div>
-            )}
-
-            <div className="space-y-4">
-              <button
-                type="submit"
-                disabled={loading}
-                className="btn btn-primary w-full py-3 text-base"
-                style={{ opacity: loading ? 0.7 : 1 }}
-              >
-                {loading
-                  ? "Loading..."
-                  : isLogin
-                    ? `Sign In as ${role === "volunteer" ? "Volunteer" : "Coordinator"}`
-                    : role === "volunteer" && volunteerSignupStep === "account"
-                      ? "Continue to Volunteer Questionnaire"
-                      : `Enter as ${role === "volunteer" ? "Volunteer" : "Coordinator"}`}
-              </button>
-
-              {!isLogin &&
-                role === "volunteer" &&
-                volunteerSignupStep === "survey" && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setVolunteerSignupStep("account");
-                      setError("");
-                    }}
-                    className="btn btn-outline w-full py-3 text-base"
-                  >
-                    Back to Account Details
-                  </button>
-                )}
-
-              <div className="text-center">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsLogin(!isLogin);
-                    setError("");
-                  }}
-                  className="text-sm font-medium"
-                  style={{ color: "var(--accent-green)" }}
-                >
-                  {isLogin
-                    ? "Don't have an account? Sign up"
-                    : "Already have an account? Sign in"}
-                </button>
               </div>
             </div>
-          </form>
-        </div>
+          )}
+
+          {/* ── Survey ── */}
+          {showSurvey && (
+            <>
+              {/* About you */}
+              <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
+                <div style={sectionHeadStyle}>About you</div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
+                  <div>
+                    <label style={labelStyle}>Age</label>
+                    <input style={inputStyle} type="number" min={13} placeholder="19"
+                      value={survey.age}
+                      onChange={(e) => setSurvey((c) => ({ ...c, age: e.target.value }))} />
+                  </div>
+                  <div>
+                    <label style={labelStyle}>Hours available / month</label>
+                    <input style={inputStyle} type="number" min={1} placeholder="8"
+                      value={survey.hoursPerMonth}
+                      onChange={(e) => setSurvey((c) => ({ ...c, hoursPerMonth: e.target.value }))} />
+                  </div>
+                </div>
+                <div>
+                  <label style={labelStyle}>Neighbourhood</label>
+                  <select style={{ ...inputStyle, appearance: "none" as const }}
+                    value={survey.neighbourhood}
+                    onChange={(e) => setSurvey((c) => ({ ...c, neighbourhood: e.target.value }))}>
+                    <option value="">Select your neighbourhood</option>
+                    {NEIGHBOURHOODS.map((n) => <option key={n} value={n}>{n}</option>)}
+                  </select>
+                </div>
+              </div>
+
+              {/* Languages & availability */}
+              <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
+                <div style={sectionHeadStyle}>Languages & availability</div>
+                <div>
+                  <label style={labelStyle}>Languages spoken</label>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: "7px", marginTop: "2px" }}>
+                    {LANGUAGES.map((l) => (
+                      <Chip key={l} label={l} selected={survey.languages.includes(l)}
+                        onClick={() => handleVolunteerToggle("languages", l)} />
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <label style={labelStyle}>Availability</label>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "8px" }}>
+                    {AVAILABILITY_OPTIONS.map((o) => (
+                      <Tile key={o} label={o} selected={survey.availability === o}
+                        onClick={() => setSurvey((c) => ({ ...c, availability: o }))} />
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Skills & causes */}
+              <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
+                <div style={sectionHeadStyle}>What you can help with</div>
+                <div>
+                  <label style={labelStyle}>Skills</label>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: "7px", marginTop: "2px" }}>
+                    {SKILLS.map((s) => (
+                      <Chip key={s} label={s} selected={survey.skills.includes(s)}
+                        onClick={() => handleVolunteerToggle("skills", s)} />
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <label style={labelStyle}>Cause areas</label>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: "7px", marginTop: "2px" }}>
+                    {CAUSE_AREAS.map((c) => (
+                      <Chip key={c} label={c} selected={survey.interests.includes(c)}
+                        onClick={() => handleVolunteerToggle("interests", c)} />
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Experience & readiness */}
+              <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
+                <div style={sectionHeadStyle}>Experience & readiness</div>
+                <div>
+                  <label style={labelStyle}>Prior volunteer experience</label>
+                  <div style={{ display: "flex", gap: "8px" }}>
+                    {EXPERIENCE_OPTIONS.map((o) => (
+                      <Tile key={o} label={o} flex selected={survey.priorExperience === o}
+                        onClick={() => setSurvey((c) => ({ ...c, priorExperience: o }))} />
+                    ))}
+                  </div>
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
+                  <div>
+                    <label style={labelStyle}>Vehicle access?</label>
+                    <div style={{ display: "flex", gap: "8px" }}>
+                      {[{ label: "Yes", value: true }, { label: "No", value: false }].map((o) => (
+                        <Tile key={o.label} label={o.label} flex selected={survey.hasVehicle === o.value}
+                          onClick={() => setSurvey((c) => ({ ...c, hasVehicle: o.value }))} />
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <label style={labelStyle}>Background check</label>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: "7px", marginTop: "2px" }}>
+                      {BACKGROUND_CHECK_OPTIONS.map((o) => (
+                        <Chip key={o} label={o} selected={survey.backgroundCheckStatus === o}
+                          onClick={() => setSurvey((c) => ({ ...c, backgroundCheckStatus: o }))} />
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
+
+          {/* Error */}
+          {error && (
+            <div style={{
+              padding: "11px 16px",
+              borderRadius: "10px",
+              background: "var(--accent-orange-light)",
+              color: "var(--accent-orange)",
+              fontSize: "0.825rem",
+              fontWeight: 500,
+              border: "1px solid rgba(200,80,40,0.15)",
+            }}>
+              {error}
+            </div>
+          )}
+
+          {/* Actions */}
+          <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem", paddingBottom: "2rem" }}>
+            <button
+              type="submit"
+              disabled={loading}
+              className="btn btn-primary"
+              style={{ width: "100%", padding: "13px", fontSize: "0.9rem", opacity: loading ? 0.7 : 1 }}
+            >
+              {loading
+                ? "Loading..."
+                : isLogin
+                ? `Sign in as ${role === "volunteer" ? "Volunteer" : "Coordinator"}`
+                : role === "volunteer" && volunteerSignupStep === "account"
+                ? "Continue to questionnaire →"
+                : `Enter as ${role === "volunteer" ? "Volunteer" : "Coordinator"} →`}
+            </button>
+
+            {showSurvey && (
+              <button
+                type="button"
+                className="btn btn-outline"
+                onClick={() => { setVolunteerSignupStep("account"); setError(""); }}
+                style={{ width: "100%", padding: "13px", fontSize: "0.9rem" }}
+              >
+                ← Back to account details
+              </button>
+            )}
+
+            <div style={{ textAlign: "center", paddingTop: "0.25rem" }}>
+              <button
+                type="button"
+                onClick={() => { setIsLogin(!isLogin); setError(""); }}
+                style={{
+                  background: "none", border: "none", cursor: "pointer",
+                  fontSize: "0.82rem", fontWeight: 500,
+                  color: "var(--accent-green)",
+                }}
+              >
+                {isLogin ? "Don't have an account? Sign up" : "Already have an account? Sign in"}
+              </button>
+            </div>
+          </div>
+        </form>
       </div>
-    </main>
+      </div>
+    </div>
   );
 }
 
 export default function AuthPage() {
   return (
-    <Suspense
-      fallback={
-        <main className="min-h-screen flex items-center justify-center">
-          <p style={{ color: "var(--text-muted)" }}>Loading...</p>
-        </main>
-      }
-    >
+    <Suspense fallback={
+      <main style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <p style={{ color: "var(--text-muted)", fontFamily: "var(--font-display)", fontStyle: "italic" }}>Loading…</p>
+      </main>
+    }>
       <AuthContent />
     </Suspense>
   );
