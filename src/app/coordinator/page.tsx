@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
-import { Org } from "@/lib/types";
+import { Org, UrgentRequest } from "@/lib/types";
 import { DEMO_VOLUNTEER_SUMMARIES, DemoVolunteerSummary } from "@/lib/demo-data";
 
 type Tab = "overview" | "urgent" | "volunteers" | "handoffs";
@@ -23,6 +23,7 @@ export default function CoordinatorDashboard() {
     skills: "",
     languages: "",
   });
+  const [postedRequests, setPostedRequests] = useState<UrgentRequest[]>([]);
 
   const [orgsLoading, setOrgsLoading] = useState(true);
 
@@ -42,6 +43,41 @@ export default function CoordinatorDashboard() {
     fetchOrgs();
   }, []);
 
+  // Fetch and subscribe to urgent requests for this org
+  useEffect(() => {
+    if (!org) return;
+
+    async function fetchRequests() {
+      const { data } = await supabase
+        .from("urgent_requests")
+        .select("*")
+        .eq("org_id", org!.id)
+        .order("created_at", { ascending: false });
+      if (data) setPostedRequests(data as UrgentRequest[]);
+    }
+    fetchRequests();
+
+    // Real-time: listen for updates to this org's requests (e.g. people_confirmed changing)
+    const channel = supabase
+      .channel("coord-urgent")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "urgent_requests", filter: `org_id=eq.${org.id}` },
+        (payload) => {
+          if (payload.eventType === "INSERT") {
+            setPostedRequests((prev) => [payload.new as UrgentRequest, ...prev]);
+          } else if (payload.eventType === "UPDATE") {
+            setPostedRequests((prev) =>
+              prev.map((r) => (r.id === (payload.new as UrgentRequest).id ? (payload.new as UrgentRequest) : r))
+            );
+          }
+        }
+      )
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, [org]);
+
   const filteredOrgs = claimSearch.length > 1
     ? allOrgs.filter((o) =>
         ((o.legal_name || "") + " " + (o.account_name || "")).toLowerCase().includes(claimSearch.toLowerCase())
@@ -58,7 +94,7 @@ export default function CoordinatorDashboard() {
     if (!org) return;
     setSubmitting(true);
 
-    const { error } = await supabase.from("urgent_requests").insert({
+    const { data, error } = await supabase.from("urgent_requests").insert({
       org_id: org.id,
       title: urgentForm.title,
       description: urgentForm.description,
@@ -70,12 +106,12 @@ export default function CoordinatorDashboard() {
       background_check_required: org.background_check_required,
       is_remote: false,
       status: "active",
-    });
+    }).select();
 
-    if (!error) {
+    if (!error && data) {
+      setPostedRequests((prev) => [data[0] as UrgentRequest, ...prev]);
       setShowUrgentForm(false);
       setUrgentForm({ title: "", description: "", deadline: "", people_needed: 1, skills: "", languages: "" });
-      alert("Urgent request posted! Matched volunteers are being notified.");
     }
 
     setSubmitting(false);
@@ -393,6 +429,65 @@ export default function CoordinatorDashboard() {
                 </form>
               </div>
             )}
+
+            {/* Posted requests */}
+            <div className="stagger-children">
+              {postedRequests.map((req) => (
+                <div
+                  key={req.id}
+                  className="card p-6 mb-4"
+                  style={{ borderLeft: `4px solid ${req.status === "active" ? "var(--urgency-critical)" : "var(--accent-green)"}` }}
+                >
+                  <div className="flex items-start justify-between mb-3">
+                    <div>
+                      <span className={`urgency-badge ${req.status === "active" ? "urgency-critical" : "urgency-low"}`}>
+                        {req.status === "active" ? "Active" : req.status === "fulfilled" ? "Fulfilled" : req.status}
+                      </span>
+                      <h3 className="text-lg font-bold mt-2">{req.title}</h3>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-sm font-semibold" style={{ color: "var(--urgency-critical)" }}>
+                        {new Date(req.deadline).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
+                      </div>
+                      <div className="text-lg font-bold mt-1" style={{ color: req.people_confirmed >= req.people_needed ? "var(--accent-green)" : "var(--accent-orange)" }}>
+                        {req.people_confirmed} / {req.people_needed}
+                      </div>
+                      <div className="text-xs" style={{ color: "var(--text-muted)" }}>volunteers confirmed</div>
+                    </div>
+                  </div>
+
+                  <p className="text-sm mb-4" style={{ color: "var(--text-secondary)" }}>{req.description}</p>
+
+                  <div className="flex gap-2 flex-wrap mb-3">
+                    {req.skills_required?.map((skill) => (
+                      <span key={skill} className="tag tag-skill">{skill}</span>
+                    ))}
+                    {req.languages_required?.map((lang) => (
+                      <span key={lang} className="tag tag-language">{lang}</span>
+                    ))}
+                  </div>
+
+                  {/* Progress bar */}
+                  <div className="score-bar w-full">
+                    <div
+                      className="score-bar-fill"
+                      style={{
+                        width: `${Math.min((req.people_confirmed / req.people_needed) * 100, 100)}%`,
+                        background: req.people_confirmed >= req.people_needed ? "var(--accent-green)" : "var(--accent-orange)",
+                      }}
+                    />
+                  </div>
+                </div>
+              ))}
+
+              {postedRequests.length === 0 && !showUrgentForm && (
+                <div className="card p-8 text-center">
+                  <p style={{ color: "var(--text-muted)" }}>
+                    No crisis requests posted yet. Click &quot;+ New Request&quot; to mobilize volunteers.
+                  </p>
+                </div>
+              )}
+            </div>
           </div>
         )}
 
