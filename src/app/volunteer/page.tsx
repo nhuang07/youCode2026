@@ -256,7 +256,7 @@ export default function VolunteerDashboard() {
         .from("volunteers")
         .select("*")
         .eq("user_id", session.user.id)
-        .single();
+        .maybeSingle();
       if (vol) {
         setVolunteer(vol as Volunteer);
       } else {

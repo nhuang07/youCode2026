@@ -4,10 +4,10 @@ import { Volunteer, Org, UrgentRequest } from "./types";
 // WEIGHTS - tune these to adjust matching priority
 // ============================================
 const WEIGHTS = {
-  skills: 35, // out of 100
-  language: 25,
-  availability: 20,
-  cause_alignment: 10,
+  skills: 40,
+  language: 10,
+  availability: 15,
+  cause_alignment: 25,
   background_check: 10,
 };
 
@@ -38,11 +38,7 @@ const AVAILABILITY_COMPAT: Record<string, string[]> = {
     "Weekdays preferred",
     "Flexible",
   ],
-  "Weekday evenings": [
-    "Weekday evenings",
-    "Weekdays preferred",
-    "Flexible",
-  ],
+  "Weekday evenings": ["Weekday evenings", "Weekdays preferred", "Flexible"],
   "Weekends only": [
     "Weekends",
     "Weekend mornings",
@@ -60,7 +56,7 @@ const AVAILABILITY_COMPAT: Record<string, string[]> = {
 
 export function computeMatchScore(
   volunteer: Volunteer,
-  org: Org
+  org: Org,
 ): {
   score: number;
   breakdown: {
@@ -75,7 +71,7 @@ export function computeMatchScore(
   const orgSkills = org.skills_needed || [];
   const volSkills = volunteer.skills || [];
   const skillOverlap = orgSkills.filter((s) =>
-    volSkills.some((vs) => vs.toLowerCase() === s.toLowerCase())
+    volSkills.some((vs) => vs.toLowerCase() === s.toLowerCase()),
   ).length;
   const skillScore =
     orgSkills.length > 0
@@ -86,7 +82,7 @@ export function computeMatchScore(
   const orgLangs = org.languages_needed || [];
   const volLangs = volunteer.languages || [];
   const langMatch = orgLangs.some((l) =>
-    volLangs.some((vl) => vl.toLowerCase() === l.toLowerCase())
+    volLangs.some((vl) => vl.toLowerCase() === l.toLowerCase()),
   );
   const languageScore = langMatch ? WEIGHTS.language : 0;
 
@@ -97,7 +93,7 @@ export function computeMatchScore(
   const availMatch =
     volAvail === orgAvail ||
     compatibleSlots.some(
-      (slot) => slot.toLowerCase() === orgAvail.toLowerCase()
+      (slot) => slot.toLowerCase() === orgAvail.toLowerCase(),
     );
   const availabilityScore = availMatch ? WEIGHTS.availability : 0;
 
@@ -106,7 +102,7 @@ export function computeMatchScore(
   const causeMatch = volInterests.some(
     (interest) =>
       interest.toLowerCase().includes(org.sector.toLowerCase()) ||
-      org.sector.toLowerCase().includes(interest.toLowerCase())
+      org.sector.toLowerCase().includes(interest.toLowerCase()),
   );
   const causeScore = causeMatch ? WEIGHTS.cause_alignment : 0;
 
@@ -117,7 +113,7 @@ export function computeMatchScore(
   }
 
   const totalScore = Math.round(
-    skillScore + languageScore + availabilityScore + causeScore + bgScore
+    skillScore + languageScore + availabilityScore + causeScore + bgScore,
   );
 
   return {
@@ -139,7 +135,7 @@ export function computeMatchScore(
 export function matchVolunteersToUrgent(
   volunteers: Volunteer[],
   request: UrgentRequest,
-  org: Org
+  org: Org,
 ): { volunteer: Volunteer; score: number }[] {
   const scored = volunteers
     .map((vol) => {
@@ -163,8 +159,12 @@ export function matchVolunteersToUrgent(
 
 export function rankOpportunitiesForVolunteer(
   volunteer: Volunteer,
-  orgs: Org[]
-): { org: Org; score: number; breakdown: ReturnType<typeof computeMatchScore>["breakdown"] }[] {
+  orgs: Org[],
+): {
+  org: Org;
+  score: number;
+  breakdown: ReturnType<typeof computeMatchScore>["breakdown"];
+}[] {
   return orgs
     .map((org) => {
       const { score, breakdown } = computeMatchScore(volunteer, org);
