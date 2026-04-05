@@ -25,79 +25,115 @@ const SLIDES = [
 
 function Slideshow() {
   const [current, setCurrent] = useState(0);
-  const [visible, setVisible] = useState(true);
 
   const goTo = useCallback((index: number) => {
-    setVisible(false);
-    setTimeout(() => {
-      setCurrent(index);
-      setVisible(true);
-    }, 350);
+    setCurrent(index);
   }, []);
 
   useEffect(() => {
     const timer = setInterval(() => {
-      goTo((current + 1) % SLIDES.length);
+      setCurrent((prev) => (prev + 1) % SLIDES.length);
     }, 4800);
     return () => clearInterval(timer);
-  }, [current, goTo]);
+  }, []);
 
   return (
-    <div style={{ position: "relative", width: "100%", height: "100%", overflow: "hidden", background: "#c8d8b8" }}>
-
-      {/* Photo */}
-      <img
-        key={current}
-        src={SLIDES[current].src}
-        alt={SLIDES[current].caption}
+    <div
+      style={{
+        position: "relative",
+        width: "100%",
+        height: "100%",
+        overflow: "hidden",
+        background: "#c8d8b8",
+      }}
+    >
+      {/* SLIDING TRACK */}
+      <div
         style={{
-          position: "absolute", inset: 0,
-          width: "100%", height: "100%",
-          objectFit: "cover",
-          opacity: visible ? 1 : 0,
-          transition: "opacity 0.45s ease",
+          display: "flex",
+          width: `${SLIDES.length * 100}%`,
+          height: "100%",
+          transform: `translateX(-${current * (100 / SLIDES.length)}%)`,
+          transition: "transform 0.6s cubic-bezier(0.77, 0, 0.175, 1)", // smooth but not floaty
+        }}
+      >
+        {SLIDES.map((slide, i) => (
+          <img
+            key={i}
+            src={slide.src}
+            alt={slide.caption}
+            style={{
+              width: `${100 / SLIDES.length}%`,
+              height: "100%",
+              objectFit: "cover",
+              flexShrink: 0,
+            }}
+          />
+        ))}
+      </div>
+
+      {/* Tint overlay */}
+      <div
+        style={{
+          position: "absolute",
+          inset: 0,
+          background: "rgba(38,60,28,0.08)",
         }}
       />
 
-      {/* Tint overlay */}
-      <div style={{ position: "absolute", inset: 0, background: "rgba(38,60,28,0.08)" }} />
-
-      {/* Bottom gradient + caption + dots */}
-      <div style={{
-        position: "absolute", bottom: 0, left: 0, right: 0,
-        padding: "3rem 2rem 1.75rem",
-        background: "linear-gradient(to top, rgba(12,20,8,0.65) 0%, transparent 100%)",
-      }}>
-        <div style={{
-          fontSize: "0.68rem", fontWeight: 600,
-          letterSpacing: "0.1em", textTransform: "uppercase",
-          color: "rgba(255,255,255,0.55)", marginBottom: "5px",
-        }}>
+      {/* Caption */}
+      <div
+        style={{
+          position: "absolute",
+          bottom: 0,
+          left: 0,
+          right: 0,
+          padding: "3rem 2rem 1.75rem",
+          background:
+            "linear-gradient(to top, rgba(12,20,8,0.65) 0%, transparent 100%)",
+        }}
+      >
+        <div
+          style={{
+            fontSize: "0.68rem",
+            fontWeight: 600,
+            letterSpacing: "0.1em",
+            textTransform: "uppercase",
+            color: "rgba(255,255,255,0.55)",
+            marginBottom: "5px",
+          }}
+        >
           Happening right now in BC
         </div>
-        <div style={{
-          fontFamily: "var(--font-display)", fontSize: "0.95rem",
-          fontStyle: "italic", color: "rgba(255,255,255,0.88)",
-          marginBottom: "1.25rem",
-        }}>
+
+        <div
+          style={{
+            fontFamily: "var(--font-display)",
+            fontSize: "0.95rem",
+            fontStyle: "italic",
+            color: "rgba(255,255,255,0.88)",
+            marginBottom: "1.25rem",
+          }}
+        >
           {SLIDES[current].caption}
         </div>
 
-        {/* Dot navigation */}
-        <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+        {/* Dots */}
+        <div style={{ display: "flex", gap: "6px" }}>
           {SLIDES.map((_, i) => (
             <button
               key={i}
               onClick={() => goTo(i)}
-              aria-label={`Go to slide ${i + 1}`}
               style={{
                 height: "5px",
                 width: i === current ? "22px" : "5px",
                 borderRadius: "3px",
-                background: i === current ? "white" : "rgba(255,255,255,0.35)",
+                background:
+                  i === current
+                    ? "white"
+                    : "rgba(255,255,255,0.35)",
                 border: "none",
                 cursor: "pointer",
-                padding: 0,
                 transition: "all 0.3s ease",
               }}
             />
@@ -105,21 +141,33 @@ function Slideshow() {
         </div>
       </div>
 
-      {/* Click zones for manual prev/next */}
+      {/* Click zones */}
       <button
-        onClick={() => goTo((current - 1 + SLIDES.length) % SLIDES.length)}
-        aria-label="Previous photo"
+        onClick={() =>
+          goTo((current - 1 + SLIDES.length) % SLIDES.length)
+        }
         style={{
-          position: "absolute", left: 0, top: 0, bottom: "6rem",
-          width: "40%", background: "transparent", border: "none", cursor: "pointer",
+          position: "absolute",
+          left: 0,
+          top: 0,
+          bottom: "6rem",
+          width: "40%",
+          background: "transparent",
+          border: "none",
+          cursor: "pointer",
         }}
       />
       <button
         onClick={() => goTo((current + 1) % SLIDES.length)}
-        aria-label="Next photo"
         style={{
-          position: "absolute", right: 0, top: 0, bottom: "6rem",
-          width: "40%", background: "transparent", border: "none", cursor: "pointer",
+          position: "absolute",
+          right: 0,
+          top: 0,
+          bottom: "6rem",
+          width: "40%",
+          background: "transparent",
+          border: "none",
+          cursor: "pointer",
         }}
       />
     </div>
