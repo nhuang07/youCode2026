@@ -32,8 +32,52 @@ export default function VolunteerDashboard() {
   const [urgentRequests, setUrgentRequests] = useState<(UrgentRequest & { org?: Org })[]>([]);
   const [rankedOrgs, setRankedOrgs] = useState<{ org: Org; score: number; breakdown: ReturnType<typeof computeMatchScore>["breakdown"] }[]>([]);
   const [loading, setLoading] = useState(true);
+  const [respondedRequests, setRespondedRequests] = useState<Record<string, "accepted" | "declined">>({});
 
   const volunteer = DEMO_VOLUNTEER;
+
+  // Handle accepting an urgent request
+  const handleAcceptUrgent = async (requestId: string) => {
+    // Insert response
+    await supabase.from("urgent_responses").insert({
+      urgent_request_id: requestId,
+      volunteer_id: volunteer.id,
+      status: "accepted",
+      responded_at: new Date().toISOString(),
+    });
+
+    // Increment people_confirmed
+    const req = urgentRequests.find((r) => r.id === requestId);
+    if (req) {
+      await supabase
+        .from("urgent_requests")
+        .update({ people_confirmed: (req.people_confirmed || 0) + 1 })
+        .eq("id", requestId);
+
+      // Update local state
+      setUrgentRequests((prev) =>
+        prev.map((r) =>
+          r.id === requestId
+            ? { ...r, people_confirmed: (r.people_confirmed || 0) + 1 }
+            : r
+        )
+      );
+    }
+
+    setRespondedRequests((prev) => ({ ...prev, [requestId]: "accepted" }));
+  };
+
+  // Handle declining an urgent request
+  const handleDeclineUrgent = async (requestId: string) => {
+    await supabase.from("urgent_responses").insert({
+      urgent_request_id: requestId,
+      volunteer_id: volunteer.id,
+      status: "declined",
+      responded_at: new Date().toISOString(),
+    });
+
+    setRespondedRequests((prev) => ({ ...prev, [requestId]: "declined" }));
+  };
 
   useEffect(() => {
     async function fetchData() {
@@ -67,7 +111,7 @@ export default function VolunteerDashboard() {
 
     fetchData();
 
-    // Subscribe to new urgent requests in real-time
+    // Subscribe to new and updated urgent requests in real-time
     const channel = supabase
       .channel("urgent-requests")
       .on(
@@ -80,6 +124,20 @@ export default function VolunteerDashboard() {
             { ...newRequest, org: matchedOrg },
             ...prev,
           ]);
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "urgent_requests" },
+        (payload) => {
+          const updated = payload.new as UrgentRequest;
+          setUrgentRequests((prev) =>
+            prev.map((r) =>
+              r.id === updated.id
+                ? { ...r, ...updated, org: r.org }
+                : r
+            )
+          );
         }
       )
       .subscribe();
@@ -232,8 +290,20 @@ export default function VolunteerDashboard() {
                       <span className="text-xs font-semibold" style={{ color: "var(--accent-green)" }}>{score}% match</span>
                     </div>
                     <div className="flex gap-2">
-                      <button className="btn btn-outline text-sm">Decline</button>
-                      <button className="btn btn-urgent text-sm">I Can Help</button>
+                      {respondedRequests[req.id] === "accepted" ? (
+                        <div className="btn text-sm" style={{ background: "var(--accent-green-light)", color: "var(--accent-green)", cursor: "default" }}>
+                          ✓ You&apos;re signed up!
+                        </div>
+                      ) : respondedRequests[req.id] === "declined" ? (
+                        <div className="btn text-sm" style={{ background: "var(--bg-secondary)", color: "var(--text-muted)", cursor: "default" }}>
+                          Declined
+                        </div>
+                      ) : (
+                        <>
+                          <button onClick={() => handleDeclineUrgent(req.id)} className="btn btn-outline text-sm">Decline</button>
+                          <button onClick={() => handleAcceptUrgent(req.id)} className="btn btn-urgent text-sm">I Can Help</button>
+                        </>
+                      )}
                     </div>
                   </div>
                 </div>
