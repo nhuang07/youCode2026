@@ -150,7 +150,36 @@ export default function VolunteerDashboard() {
   const [plannedContributions, setPlannedContributions] = useState<PlannedContribution[]>([]);
   const [hoveredCard, setHoveredCard] = useState<string | null>(null);
   const [hoveredCancelPlan, setHoveredCancelPlan] = useState<string | null>(null);
+  const [impactChartReady, setImpactChartReady] = useState(false);
   const volunteer = DEMO_VOLUNTEER;
+  const impactSlices = [
+    { company: "Harvest of Hope Society", hours: 9, color: "#5f7f52" },
+    { company: "Immigrant Services Society", hours: 6, color: "#cf5f5f" },
+    { company: "South Van Neighbourhood House", hours: 5, color: "#d6a548" },
+    { company: "Youth Futures Hub", hours: 4, color: "#6f8f7f" },
+  ];
+  const totalImpactHours = impactSlices.reduce((sum, slice) => sum + slice.hours, 0);
+  const impactChartSize = 220;
+  const impactRadius = 82;
+  const impactStrokeWidth = 56;
+  const impactCircumference = 2 * Math.PI * impactRadius;
+  const impactChartSlices = impactSlices.reduce(
+    (acc, slice) => {
+      const length = (slice.hours / totalImpactHours) * impactCircumference;
+      acc.items.push({
+        ...slice,
+        length,
+        offset: -acc.offset,
+        percent: Math.round((slice.hours / totalImpactHours) * 100),
+      });
+      acc.offset += length;
+      return acc;
+    },
+    {
+      offset: 0,
+      items: [] as Array<(typeof impactSlices)[number] & { length: number; offset: number; percent: number }>,
+    },
+  ).items;
 
   const urgencyColor = (urgency: string) =>
     ({ Critical: "var(--urgency-critical)", High: "var(--urgency-high)", Medium: "var(--urgency-medium)" }[urgency] || "var(--urgency-low)");
@@ -274,6 +303,16 @@ export default function VolunteerDashboard() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  useEffect(() => {
+    if (activeTab !== "impact") {
+      setImpactChartReady(false);
+      return;
+    }
+    setImpactChartReady(false);
+    const timer = window.setTimeout(() => setImpactChartReady(true), 80);
+    return () => window.clearTimeout(timer);
+  }, [activeTab]);
+
   const tabs: { id: Tab; label: string; alert?: boolean }[] = [
     { id: "browse", label: "Browse", alert: urgentRequests.length > 0 },
     { id: "plans", label: "My Plans" },
@@ -363,6 +402,7 @@ export default function VolunteerDashboard() {
       </div>
 
       <div style={{ maxWidth: "860px", margin: "0 auto", padding: "2rem 1.5rem" }}>
+        {(activeTab === "browse" || activeTab === "plans") && (
         <div style={{ marginBottom: "1.5rem" }}>
           <input
             type="search"
@@ -386,6 +426,7 @@ export default function VolunteerDashboard() {
             }}
           />
         </div>
+        )}
 
         {/* ══ BROWSE ══ */}
         {activeTab === "browse" && (
@@ -663,27 +704,143 @@ export default function VolunteerDashboard() {
         {/* ══ IMPACT ══ */}
         {activeTab === "impact" && (
           <div>
-            <h2 style={{ fontFamily: "var(--font-display)", fontSize: "1.5rem", fontWeight: 500, marginBottom: "1.5rem" }}>Your Impact</h2>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "1rem", marginBottom: "2rem" }}>
-              {[
-                { n: "24", label: "Hours volunteered", c: "var(--accent-green)" },
-                { n: "8", label: "Shifts completed", c: "var(--accent-green)" },
-                { n: "3", label: "Crisis responses", c: "var(--urgency-critical)" },
-                { n: "5", label: "Week streak", c: "var(--urgency-medium)" },
-              ].map((stat) => (
-                <div key={stat.label} className="card" style={{ padding: "1.25rem", textAlign: "center" }}>
-                  <div style={{ fontFamily: "var(--font-display)", fontSize: "1.75rem", fontWeight: 500, color: stat.c }}>{stat.n}</div>
-                  <div style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginTop: "0.25rem" }}>{stat.label}</div>
+            <h2 style={{ fontFamily: "var(--font-display)", fontSize: "1.5rem", fontWeight: 500, marginBottom: "0.35rem" }}>Your Impact</h2>
+            <p style={{ fontSize: "0.85rem", color: "var(--text-secondary)", marginBottom: "1.5rem" }}>
+              A simple view of how your hours were shared across organizations.
+            </p>
+
+            <div className="card" style={{ padding: "1.75rem", marginBottom: "2rem", overflow: "hidden" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "1.25rem", gap: "1rem", flexWrap: "wrap" }}>
+                <div>
+                  <div style={{ fontSize: "0.75rem", fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--accent-green)", marginBottom: "0.35rem" }}>
+                    April Breakdown
+                  </div>
+                  <div style={{ fontFamily: "var(--font-display)", fontSize: "1.2rem", fontWeight: 500 }}>
+                    Hours by organization
+                  </div>
                 </div>
-              ))}
-            </div>
-            <div className="card" style={{ padding: "2rem", textAlign: "center", maxWidth: "360px", margin: "0 auto", background: "var(--accent-matcha-pale)" }}>
-              <div style={{ fontSize: "0.8rem", fontWeight: 600, color: "var(--accent-green)", marginBottom: "0.5rem" }}>match-a</div>
-              <div style={{ fontFamily: "var(--font-display)", fontSize: "1.1rem", fontWeight: 500, marginBottom: "0.25rem" }}>{volunteer.name}</div>
-              <div style={{ fontSize: "0.85rem", color: "var(--text-secondary)", marginBottom: "1rem" }}>volunteered 24 hours this month</div>
-              <div style={{ fontFamily: "var(--font-display)", fontSize: "2rem", fontWeight: 500, color: "var(--accent-green)", marginBottom: "0.25rem" }}>200+</div>
-              <div style={{ fontSize: "0.85rem", color: "var(--text-secondary)" }}>families helped through meal delivery</div>
-              <button className="btn btn-primary" style={{ marginTop: "1.25rem", fontSize: "0.85rem" }}>Share Your Impact</button>
+                <div className="tag tag-skill">{totalImpactHours} total hours</div>
+              </div>
+
+              <div style={{ display: "grid", gridTemplateColumns: "280px 1fr", gap: "2rem", alignItems: "center" }}>
+                <div style={{ display: "flex", justifyContent: "center" }}>
+                  <div
+                    style={{
+                      width: `${impactChartSize}px`,
+                      height: `${impactChartSize}px`,
+                      borderRadius: "50%",
+                      position: "relative",
+                      display: "grid",
+                      placeItems: "center",
+                    }}
+                  >
+                    <svg
+                      width={impactChartSize}
+                      height={impactChartSize}
+                      viewBox={`0 0 ${impactChartSize} ${impactChartSize}`}
+                      style={{ overflow: "visible", transform: "rotate(-90deg)" }}
+                      aria-hidden="true"
+                    >
+                      <circle
+                        cx={impactChartSize / 2}
+                        cy={impactChartSize / 2}
+                        r={impactRadius}
+                        fill="none"
+                        stroke="rgba(95, 127, 82, 0.12)"
+                        strokeWidth={impactStrokeWidth}
+                      />
+                      {impactChartSlices.map((slice, index) => (
+                        <circle
+                          key={slice.company}
+                          cx={impactChartSize / 2}
+                          cy={impactChartSize / 2}
+                          r={impactRadius}
+                          fill="none"
+                          stroke={slice.color}
+                          strokeWidth={impactStrokeWidth}
+                          strokeDasharray={
+                            impactChartReady
+                              ? `${slice.length} ${impactCircumference}`
+                              : `0 ${impactCircumference}`
+                          }
+                          strokeDashoffset={impactChartReady ? slice.offset : 0}
+                          strokeLinecap="round"
+                          style={{
+                            transition: `stroke-dasharray 1100ms cubic-bezier(0.16, 1, 0.3, 1) ${index * 70}ms, opacity 500ms ease ${index * 70}ms`,
+                            opacity: impactChartReady ? 1 : 0.55,
+                          }}
+                        />
+                      ))}
+                    </svg>
+                    <div
+                      style={{
+                        position: "absolute",
+                        inset: "32px",
+                        borderRadius: "50%",
+                        background: "var(--bg-card)",
+                        display: "flex",
+                        flexDirection: "column",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        textAlign: "center",
+                        boxShadow: "0 0 0 1px var(--border-light)",
+                        transform: impactChartReady ? "scale(1)" : "translateY(6px) scale(0.96)",
+                        opacity: impactChartReady ? 1 : 0.85,
+                        transition: "transform 700ms cubic-bezier(0.22, 1, 0.36, 1) 140ms, opacity 500ms ease 140ms",
+                      }}
+                    >
+                      <div style={{ fontSize: "0.72rem", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "0.2rem" }}>
+                        Total
+                      </div>
+                      <div style={{ fontFamily: "var(--font-display)", fontSize: "2rem", fontWeight: 500, color: "var(--accent-green)" }}>
+                        {totalImpactHours}h
+                      </div>
+                      <div style={{ fontSize: "0.8rem", color: "var(--text-secondary)" }}>
+                        this month
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div style={{ display: "grid", gap: "0.75rem" }}>
+                  {impactChartSlices.map((slice) => (
+                    <div
+                      key={slice.company}
+                      style={{
+                        display: "grid",
+                        gridTemplateColumns: "14px 1fr auto",
+                        gap: "0.85rem",
+                        alignItems: "center",
+                        padding: "0.9rem 1rem",
+                        borderRadius: "16px",
+                        background: "var(--bg-primary)",
+                        border: "1px solid var(--border-light)",
+                      }}
+                    >
+                      <span
+                        style={{
+                          width: "14px",
+                          height: "14px",
+                          borderRadius: "50%",
+                          background: slice.color,
+                          display: "inline-block",
+                        }}
+                      />
+                      <div>
+                        <div style={{ fontWeight: 600, color: "var(--text-primary)", marginBottom: "0.15rem" }}>
+                          {slice.company}
+                        </div>
+                        <div style={{ fontSize: "0.82rem", color: "var(--text-secondary)" }}>
+                          {slice.hours} hour{slice.hours === 1 ? "" : "s"} contributed this month
+                        </div>
+                      </div>
+                      <div style={{ fontFamily: "var(--font-display)", fontSize: "1.15rem", fontWeight: 500, color: slice.color }}>
+                        {slice.percent}%
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
           </div>
         )}
